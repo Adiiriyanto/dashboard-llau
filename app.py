@@ -1,11 +1,17 @@
 import streamlit as st
 import pandas as pd
 
+# ========================
+# CONFIG
+# ========================
 st.set_page_config(page_title="Dashboard Bandara", layout="wide")
 
 st.title("✈️ Dashboard Operasional Bandara")
-st.caption("Penumpang & Kargo (Presisi + Fleksibel)")
+st.caption("Penumpang & Kargo (Stabil & Anti Error)")
 
+# ========================
+# UPLOAD
+# ========================
 uploaded_file = st.file_uploader("Upload File Excel", type=["xlsx"])
 
 if uploaded_file:
@@ -20,28 +26,18 @@ if uploaded_file:
         st.stop()
 
     # ========================
-    # MAPPING PRESISI (LLAU)
+    # CLEAN HEADER (WAJIB)
     # ========================
-    try:
-        df = df.rename(columns={
-            df.columns[1]: "Tanggal",
-            df.columns[8]: "Maskapai",
-            df.columns[17]: "Jenis",
-            df.columns[18]: "Dewasa",
-            df.columns[19]: "Anak",
-            df.columns[20]: "Bayi",
-            df.columns[21]: "Transit",
-            df.columns[22]: "Kargo"
-        })
-    except:
-        pass  # fallback ke auto detect
+    df.columns = [str(col).strip() for col in df.columns]
+    df = df.loc[:, ~df.columns.duplicated()]
 
     # ========================
-    # AUTO DETECT (FALLBACK)
+    # MAPPING PRESISI + FLEX
     # ========================
     col_map = {}
+
     for col in df.columns:
-        c = str(col).lower()
+        c = col.lower()
 
         if "tanggal" in c:
             col_map[col] = "Tanggal"
@@ -63,7 +59,7 @@ if uploaded_file:
     df = df.rename(columns=col_map)
 
     # ========================
-    # VALIDASI WAJIB
+    # VALIDASI
     # ========================
     if "Tanggal" not in df.columns or "Maskapai" not in df.columns:
         st.error("Format file tidak dikenali")
@@ -71,23 +67,35 @@ if uploaded_file:
         st.stop()
 
     # ========================
-    # NORMALISASI
+    # NORMALISASI DATA
     # ========================
-    if "Jenis" not in df.columns:
-        df["Jenis"] = "D"
-
     df = df[df["Tanggal"].notna()].copy()
     df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce")
 
+    if "Jenis" not in df.columns:
+        df["Jenis"] = "D"
+
+    # ========================
+    # NUMERIC SAFE CONVERSION
+    # ========================
     for col in ["Dewasa", "Anak", "Bayi", "Transit", "Kargo"]:
         if col not in df.columns:
             df[col] = 0
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
+        # Hindari error DataFrame (duplikat)
+        if isinstance(df[col], pd.DataFrame):
+            df[col] = df[col].iloc[:, 0]
+
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = df[col].fillna(0)
+
+    # ========================
+    # TOTAL
+    # ========================
     df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"] + df["Transit"]
 
     # ========================
-    # FILTER
+    # SIDEBAR FILTER
     # ========================
     st.sidebar.header("⚙️ Filter")
 
@@ -96,25 +104,31 @@ if uploaded_file:
 
     jenis = st.sidebar.selectbox("Jenis", ["D", "A"])
 
-    tanggal_list = sorted(df["Tanggal"].dt.date.unique())
+    tanggal_list = sorted(df["Tanggal"].dt.date.dropna().unique())
     tanggal = st.sidebar.selectbox("Tanggal", tanggal_list)
 
     search = st.sidebar.text_input("🔎 Search")
 
     kategori = st.sidebar.selectbox(
-        "Kategori",
+        "Kategori Data",
         ["Semua", "Dewasa", "Dewasa + Anak", "Bayi", "Transit", "Kargo"]
     )
 
     # ========================
-    # FILTER DATA (AMAN)
+    # FILTER DATA (SAFE)
     # ========================
     df_filtered = df.copy()
 
-    df_filtered = df_filtered[df_filtered["Maskapai"] == maskapai]
-    df_filtered = df_filtered[df_filtered["Jenis"] == jenis]
-    df_filtered = df_filtered[df_filtered["Tanggal"].dt.date == tanggal]
+    if "Maskapai" in df.columns:
+        df_filtered = df_filtered[df_filtered["Maskapai"] == maskapai]
 
+    if "Jenis" in df.columns:
+        df_filtered = df_filtered[df_filtered["Jenis"] == jenis]
+
+    if "Tanggal" in df.columns:
+        df_filtered = df_filtered[df_filtered["Tanggal"].dt.date == tanggal]
+
+    # SEARCH
     if search:
         df_filtered = df_filtered[
             df_filtered.apply(
@@ -128,25 +142,30 @@ if uploaded_file:
     # ========================
     if kategori == "Dewasa":
         df_filtered["TotalKategori"] = df_filtered["Dewasa"]
+
     elif kategori == "Dewasa + Anak":
         df_filtered["TotalKategori"] = df_filtered["Dewasa"] + df_filtered["Anak"]
+
     elif kategori == "Bayi":
         df_filtered["TotalKategori"] = df_filtered["Bayi"]
+
     elif kategori == "Transit":
         df_filtered["TotalKategori"] = df_filtered["Transit"]
+
     elif kategori == "Kargo":
         df_filtered["TotalKategori"] = df_filtered["Kargo"]
+
     else:
         df_filtered["TotalKategori"] = df_filtered["Total"]
 
     # ========================
     # KPI
     # ========================
-    st.subheader("📊 KPI")
+    st.subheader("📊 KPI Utama")
 
     col1, col2, col3, col4, col5 = st.columns(5)
 
-    col1.metric("Total Pax", int(df["Total"].sum()))
+    col1.metric("Total Penumpang", int(df["Total"].sum()))
     col2.metric("Filtered", int(df_filtered["TotalKategori"].sum()))
     col3.metric("Flight", len(df))
     col4.metric("Transit", int(df["Transit"].sum()))
@@ -162,22 +181,30 @@ if uploaded_file:
     st.line_chart(df.groupby(df["Tanggal"].dt.date)["Kargo"].sum())
 
     st.subheader("🏆 Top Maskapai")
-    st.bar_chart(df.groupby("Maskapai")["Total"].sum().sort_values(ascending=False).head(5))
+    st.bar_chart(
+        df.groupby("Maskapai")["Total"]
+        .sum()
+        .sort_values(ascending=False)
+        .head(5)
+    )
+
+    st.subheader("🧭 Distribusi D vs A")
+    st.bar_chart(df.groupby("Jenis")["Total"].sum())
 
     # ========================
-    # DATA
+    # TABLE
     # ========================
-    st.subheader("📋 Detail")
+    st.subheader("📋 Detail Data")
     st.dataframe(df_filtered, use_container_width=True)
 
     # ========================
     # DOWNLOAD
     # ========================
     st.download_button(
-        "⬇️ Download",
+        "⬇️ Download Data",
         df_filtered.to_csv(index=False),
-        "hasil.csv"
+        "hasil_dashboard.csv"
     )
 
 else:
-    st.info("Upload file Excel terlebih dahulu")
+    st.info("Silakan upload file Excel LLAU terlebih dahulu.")

@@ -4,87 +4,53 @@ import pandas as pd
 st.set_page_config(layout="wide")
 st.title("✈️ Dashboard LLAU Rendani Airport")
 
-uploaded_file = st.file_uploader("Upload File Excel LLAU", type=["xlsx"])
+file = st.file_uploader("Upload File Excel LLAU", type=["xlsx"])
 
-if uploaded_file:
-
-    # =========================
-    # LOAD DATA SUPER AMAN
-    # =========================
-    try:
-        df = pd.read_excel(uploaded_file, header=[8,9])
-    except:
-        df = pd.read_excel(uploaded_file)
+if file:
 
     # =========================
-    # FIX HEADER MULTI LEVEL
+    # LOAD FIX (HEADER 2 BARIS)
     # =========================
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [
-            "_".join([str(i).strip() for i in col if str(i) != "nan"])
-            for col in df.columns
-        ]
-
-    df.columns = [str(c).strip() for c in df.columns]
+    df = pd.read_excel(file, header=[0,1])
 
     # =========================
-    # HAPUS KOLOM DUPLIKAT
+    # FLATTEN HEADER
     # =========================
-    df = df.loc[:, ~df.columns.duplicated()]
+    df.columns = [
+        f"{str(a).strip()}_{str(b).strip()}"
+        for a, b in df.columns
+    ]
 
     # =========================
-    # DETEKSI KOLOM OTOMATIS
-    # =========================
-    def find_col(keyword):
-        for col in df.columns:
-            if keyword in col.lower():
-                return col
-        return None
-
-    col_tanggal = find_col("tanggal")
-    col_maskapai = find_col("maskapai") or find_col("operator")
-    col_jenis = find_col("jenis") or find_col("a_d")
-
-    col_dewasa = find_col("dewasa")
-    col_anak = find_col("anak")
-    col_bayi = find_col("bayi")
-    col_transit = find_col("transit")
-    col_kargo = find_col("cargo") or find_col("kargo")
-
-    # =========================
-    # VALIDASI MINIMAL
-    # =========================
-    if col_tanggal is None or col_maskapai is None:
-        st.error("Format file tidak dikenali")
-        st.write("Kolom terbaca:", df.columns.tolist())
-        st.stop()
-
-    # =========================
-    # BENTUK DATA BERSIH
+    # AMBIL KOLOM SESUAI POSISI ASLI LLAU
     # =========================
     clean = pd.DataFrame()
 
-    clean["Tanggal"] = df[col_tanggal]
-    clean["Maskapai"] = df[col_maskapai]
+    clean["Tanggal"] = df["TANGGAL PENERBANGAN\n(DD-MM-YYYY)\n** Wajib Diisi_nan"]
+    clean["Maskapai"] = df["OPERATOR PENERBANGAN\n** Wajib Diisi_Nama Operator"]
+    clean["Jenis"] = df["Pergerakan Penerbangan_(A / D)"]
 
-    clean["Jenis"] = df[col_jenis] if col_jenis else "D"
+    # Penumpang
+    clean["Dewasa"] = df["Data Penumpang\n** Wajib Diisi_Dewasa"]
+    clean["Anak"] = df["Data Penumpang\n** Wajib Diisi_Anak"]
+    clean["Bayi"] = df["Data Penumpang\n** Wajib Diisi_Bayi"]
 
-    clean["Dewasa"] = df[col_dewasa] if col_dewasa else 0
-    clean["Anak"] = df[col_anak] if col_anak else 0
-    clean["Bayi"] = df[col_bayi] if col_bayi else 0
-    clean["Transit"] = df[col_transit] if col_transit else 0
-    clean["Kargo"] = df[col_kargo] if col_kargo else 0
+    # Transit
+    clean["Transit"] = df["Data Penumpang Transit\n** Wajib Diisi Apabila..._Dewasa"]
+
+    # Kargo
+    clean["Kargo"] = df["Kargo (Kg)\n**Wajib Diisi_nan"]
 
     df = clean.copy()
 
     # =========================
-    # FIX TIPE DATA (ANTI ERROR)
+    # FIX DATA
     # =========================
-    df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce", dayfirst=True)
+    df["Tanggal"] = pd.to_datetime(df["Tanggal"], dayfirst=True, errors="coerce")
     df = df.dropna(subset=["Tanggal"])
 
-    df["Maskapai"] = df["Maskapai"].astype(str).str.strip().str.upper()
-    df["Jenis"] = df["Jenis"].astype(str).str.strip().str.upper()
+    df["Maskapai"] = df["Maskapai"].astype(str).str.upper().str.strip()
+    df["Jenis"] = df["Jenis"].astype(str).str.upper().str.strip()
 
     for col in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
@@ -92,7 +58,7 @@ if uploaded_file:
     df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"] + df["Transit"]
 
     # =========================
-    # SIDEBAR
+    # FILTER
     # =========================
     st.sidebar.header("Filter")
 
@@ -101,24 +67,24 @@ if uploaded_file:
 
     mode = st.sidebar.radio("Tanggal", ["1 Hari","Rentang"])
 
-    min_date = df["Tanggal"].min().date()
-    max_date = df["Tanggal"].max().date()
+    min_d = df["Tanggal"].min().date()
+    max_d = df["Tanggal"].max().date()
 
     if mode == "1 Hari":
-        d = st.sidebar.date_input("Tanggal", min_date)
-        start_date = pd.to_datetime(d)
-        end_date = pd.to_datetime(d)
+        d = st.sidebar.date_input("Tanggal", min_d)
+        start = pd.to_datetime(d)
+        end = start
     else:
-        dr = st.sidebar.date_input("Rentang", (min_date, max_date))
-        if isinstance(dr, tuple) and len(dr) == 2:
-            start_date = pd.to_datetime(dr[0])
-            end_date = pd.to_datetime(dr[1])
+        dr = st.sidebar.date_input("Rentang", (min_d, max_d))
+        if isinstance(dr, tuple):
+            start = pd.to_datetime(dr[0])
+            end = pd.to_datetime(dr[1])
         else:
-            start_date = pd.to_datetime(min_date)
-            end_date = pd.to_datetime(max_date)
+            start = pd.to_datetime(min_d)
+            end = pd.to_datetime(max_d)
 
     keyword = st.sidebar.text_input("Search")
-    tombol = st.sidebar.button("Cari")
+    btn = st.sidebar.button("Cari")
 
     kategori = st.sidebar.selectbox(
         "Kategori",
@@ -128,60 +94,57 @@ if uploaded_file:
     # =========================
     # FILTER DATA
     # =========================
-    df_f = df.copy()
+    f = df.copy()
 
-    df_f = df_f[df_f["Maskapai"] == maskapai]
+    f = f[f["Maskapai"] == maskapai]
 
     if jenis != "SEMUA":
-        df_f = df_f[df_f["Jenis"] == jenis]
+        f = f[f["Jenis"] == jenis]
 
-    df_f = df_f[
-        (df_f["Tanggal"] >= start_date) &
-        (df_f["Tanggal"] <= end_date)
-    ]
+    f = f[(f["Tanggal"] >= start) & (f["Tanggal"] <= end)]
 
-    if tombol and keyword:
-        df_f = df_f[
-            df_f.astype(str)
+    if btn and keyword:
+        f = f[
+            f.astype(str)
             .apply(lambda r: r.str.contains(keyword, case=False).any(), axis=1)
         ]
 
     # =========================
-    # HITUNG HASIL
+    # HASIL
     # =========================
     if kategori == "Dewasa":
-        df_f["Hasil"] = df_f["Dewasa"]
+        f["Hasil"] = f["Dewasa"]
     elif kategori == "Dewasa + Anak":
-        df_f["Hasil"] = df_f["Dewasa"] + df_f["Anak"]
+        f["Hasil"] = f["Dewasa"] + f["Anak"]
     elif kategori == "Bayi":
-        df_f["Hasil"] = df_f["Bayi"]
+        f["Hasil"] = f["Bayi"]
     elif kategori == "Transit":
-        df_f["Hasil"] = df_f["Transit"]
+        f["Hasil"] = f["Transit"]
     elif kategori == "Kargo":
-        df_f["Hasil"] = df_f["Kargo"]
+        f["Hasil"] = f["Kargo"]
     else:
-        df_f["Hasil"] = df_f["Total"]
+        f["Hasil"] = f["Total"]
 
-    total = int(df_f["Hasil"].sum())
+    total = int(f["Hasil"].sum())
 
     # =========================
     # KPI
     # =========================
     st.subheader("📊 KPI Utama")
-
     c1,c2,c3,c4 = st.columns(4)
+
     c1.metric("Total Penumpang", int(df["Total"].sum()))
     c2.metric("Flight", len(df))
     c3.metric("Transit", int(df["Transit"].sum()))
     c4.metric("Kargo", int(df["Kargo"].sum()))
 
     # =========================
-    # HASIL PENCARIAN
+    # HASIL
     # =========================
     st.subheader("📌 Hasil Pencarian")
     st.metric("Total Hasil", total)
 
-    if df_f.empty:
+    if f.empty:
         st.warning("Data tidak ditemukan")
 
     # =========================
@@ -194,7 +157,7 @@ if uploaded_file:
     # TABEL
     # =========================
     st.subheader("📋 Detail Data")
-    st.dataframe(df_f, use_container_width=True)
+    st.dataframe(f, use_container_width=True)
 
 else:
     st.info("Upload file Excel terlebih dahulu")

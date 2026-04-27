@@ -10,7 +10,7 @@ import os
 st.set_page_config(layout="wide")
 
 # =========================
-# SAFE LOAD LOGO (ANTI ERROR)
+# LOAD LOGO
 # =========================
 def load_logo():
     try:
@@ -24,18 +24,16 @@ def load_logo():
 logo_base64 = load_logo()
 
 # =========================
-# STYLE (SAFE WATERMARK)
+# STYLE
 # =========================
-base_css = """
+st.markdown("""
 <style>
 .stApp {
     background: linear-gradient(135deg, #0f172a, #1e293b);
 }
-
 section[data-testid="stSidebar"] {
     background-color: #111827;
 }
-
 .metric-card {
     background: #1f2937;
     padding: 15px;
@@ -43,26 +41,19 @@ section[data-testid="stSidebar"] {
     text-align: center;
     border: 1px solid #374151;
 }
-
 .metric-value {
     font-size: 28px;
     font-weight: bold;
 }
-
 .green { color: #22c55e; }
 .red { color: #ef4444; }
 .blue { color: #3b82f6; }
 .orange { color: #f59e0b; }
-
-h1, h2, h3 {
-    color: #e5e7eb;
-}
+h1, h2, h3 { color: #e5e7eb; }
 </style>
-"""
+""", unsafe_allow_html=True)
 
-st.markdown(base_css, unsafe_allow_html=True)
-
-# WATERMARK (hanya kalau logo ada)
+# WATERMARK
 if logo_base64:
     st.markdown(f"""
     <style>
@@ -74,19 +65,17 @@ if logo_base64:
         position: fixed;
         width: 100%;
         height: 100%;
-        pointer-events: none;
     }}
     </style>
     """, unsafe_allow_html=True)
 
 # =========================
-# HEADER (SAFE LOGO)
+# HEADER
 # =========================
 col1, col2, col3 = st.columns([1,7,2])
 
 with col1:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", width=70)
+    st.image("logo.png", width=70)
 
 with col2:
     st.title("✈️ Dashboard LLAU Rendani Airport")
@@ -96,11 +85,9 @@ with col3:
         st.rerun()
 
 # =========================
-# SIDEBAR (SAFE LOGO)
+# SIDEBAR
 # =========================
-if os.path.exists("logo.png"):
-    st.sidebar.image("logo.png", width=140)
-
+st.sidebar.image("logo.png", width=140)
 st.sidebar.markdown("### LLAU Rendani Airport")
 st.sidebar.markdown("---")
 
@@ -136,6 +123,7 @@ if file:
     col_tgl = find("tanggal")
     col_mask = find("operator") or find("maskapai")
     col_jns = find("pergerakan") or find("jenis")
+    col_flight = find("flight") or find("penerbangan") or find("no")
 
     col_dew = find("dewasa")
     col_anak = find("anak")
@@ -154,11 +142,12 @@ if file:
         st.write(df.columns)
         st.stop()
 
-    # CLEAN DATA
+    # DATAFRAME
     data = pd.DataFrame({
         "Tanggal": df[col_tgl],
         "Maskapai": df[col_mask],
         "Pergerakan": df[col_jns] if col_jns else "D",
+        "No Flight": df[col_flight] if col_flight else "UNKNOWN",
         "Dewasa": df[col_dew] if col_dew else 0,
         "Anak": df[col_anak] if col_anak else 0,
         "Bayi": df[col_bayi] if col_bayi else 0,
@@ -167,26 +156,29 @@ if file:
         "Kargo": df[col_kargo] if col_kargo else 0
     })
 
+    # CLEAN
     data["Tanggal"] = pd.to_datetime(data["Tanggal"], errors="coerce", dayfirst=True)
     data = data.dropna(subset=["Tanggal"])
 
     data["Pergerakan"] = data["Pergerakan"].astype(str).str.upper().str.strip()
-    data["Pergerakan"] = data["Pergerakan"].replace({
-        "D": "Departure",
-        "A": "Arrival"
-    })
+    data["Pergerakan"] = data["Pergerakan"].replace({"D": "Departure","A": "Arrival"})
+
+    data["No Flight"] = data["No Flight"].astype(str).str.strip()
 
     for c in ["Dewasa","Anak","Bayi","Transit_Dewasa","Transit_Total","Kargo"]:
         data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
 
-    # PERHITUNGAN
+    # HITUNGAN
     data["Dewasa_Bersih"] = (data["Dewasa"] - data["Transit_Dewasa"]).clip(lower=0)
     data["PJP2U"] = ((data["Dewasa"] + data["Anak"]) - data["Transit_Total"]).clip(lower=0)
 
+    # =========================
     # FILTER
+    # =========================
     st.sidebar.header("Filter")
 
     maskapai = st.sidebar.selectbox("Maskapai", sorted(data["Maskapai"].unique()))
+    flight = st.sidebar.selectbox("No Penerbangan", ["SEMUA"] + sorted(data["No Flight"].unique()))
     pergerakan = st.sidebar.selectbox("Pergerakan", ["SEMUA","Departure","Arrival"])
 
     mode = st.sidebar.radio("Tanggal", ["1 Hari","Rentang"])
@@ -211,6 +203,9 @@ if file:
     # FILTER DATA
     f = data.copy()
     f = f[f["Maskapai"] == maskapai]
+
+    if flight != "SEMUA":
+        f = f[f["No Flight"] == flight]
 
     if pergerakan != "SEMUA":
         f = f[f["Pergerakan"] == pergerakan]
@@ -262,14 +257,15 @@ if file:
     st.subheader("📈 Tren PJP2U")
     st.line_chart(data.groupby(data["Tanggal"].dt.date)["PJP2U"].sum())
 
+    # =========================
+    # DETAIL (SUDAH ADA FLIGHT)
+    # =========================
     st.subheader("📋 Detail Data")
     st.dataframe(f, use_container_width=True)
 
     st.markdown("""
-    <hr style="margin-top:50px;">
-    <p style='text-align: center; color: #9ca3af; font-size: 13px;'>
-    Copyright © 2026 Data UPBU Rendani Airport
-    </p>
+    <hr>
+    <p style='text-align: center; color: gray;'>Copyright © 2026 Data UPBU Rendani Airport</p>
     """, unsafe_allow_html=True)
 
 else:

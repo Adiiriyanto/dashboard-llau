@@ -1,88 +1,78 @@
-import streamlit as st
-import pandas as pd
+# ========================
+# FILTER TAMBAHAN
+# ========================
 
-st.set_page_config(page_title="Dashboard LLAU", layout="wide")
+st.sidebar.subheader("🔎 Pencarian")
 
-st.title("📊 Dashboard Penumpang LLAU")
-st.caption("Default: Lion Air (Berangkat) — bisa diubah")
+search = st.sidebar.text_input("Cari data (maskapai / flight / dll)")
 
-uploaded_file = st.file_uploader("Upload File Excel LLAU", type=["xlsx"])
+st.sidebar.subheader("🎯 Pilih Jenis Data")
 
-if uploaded_file:
-    df = pd.read_excel(uploaded_file, skiprows=9)
+kategori = st.sidebar.selectbox(
+    "Kategori Penumpang",
+    ["Semua", "Dewasa", "Dewasa + Anak", "Bayi", "Transit"]
+)
 
-    df = df.rename(columns={
-        df.columns[1]: "Tanggal",
-        df.columns[8]: "Maskapai",
-        df.columns[17]: "Jenis",
-        df.columns[18]: "Dewasa",
-        df.columns[19]: "Anak",
-        df.columns[20]: "Bayi"
-    })
+# ========================
+# FILTER UTAMA
+# ========================
 
-    df = df[df["Tanggal"].notna()]
-    df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors='coerce')
+df_filtered = df[
+    (df["Maskapai"] == maskapai) &
+    (df["Jenis"] == jenis) &
+    (df["Tanggal"].dt.date == tanggal)
+]
 
-    df["Total"] = (
-        df["Dewasa"].fillna(0) +
-        df["Anak"].fillna(0) +
-        df["Bayi"].fillna(0)
+# ========================
+# APPLY SEARCH
+# ========================
+if search:
+    df_filtered = df_filtered[df_filtered.apply(
+        lambda row: row.astype(str).str.contains(search, case=False).any(),
+        axis=1
+    )]
+
+# ========================
+# HITUNG TOTAL SESUAI PILIHAN
+# ========================
+if kategori == "Dewasa":
+    df_filtered["TotalKategori"] = df_filtered["Dewasa"]
+
+elif kategori == "Dewasa + Anak":
+    df_filtered["TotalKategori"] = (
+        df_filtered["Dewasa"].fillna(0) +
+        df_filtered["Anak"].fillna(0)
     )
 
-    # Auto Lion Air
-    default_maskapai = None
-    for m in df["Maskapai"].dropna().unique():
-        if "LION" in str(m).upper():
-            default_maskapai = m
-            break
+elif kategori == "Bayi":
+    df_filtered["TotalKategori"] = df_filtered["Bayi"]
 
-    if default_maskapai is None:
-        default_maskapai = df["Maskapai"].dropna().unique()[0]
+elif kategori == "Transit":
+    if "Transit" in df.columns:
+        df_filtered["TotalKategori"] = df_filtered["Transit"]
+    else:
+        st.warning("Kolom Transit tidak ditemukan")
+        df_filtered["TotalKategori"] = 0
 
-    st.sidebar.header("Filter Data")
+else:  # Semua
+    df_filtered["TotalKategori"] = df_filtered["Total"]
 
-    maskapai = st.sidebar.selectbox(
-        "Maskapai",
-        df["Maskapai"].dropna().unique(),
-        index=list(df["Maskapai"].dropna().unique()).index(default_maskapai)
-    )
+# ========================
+# KPI UPDATE
+# ========================
+st.subheader("📌 Ringkasan")
 
-    jenis = st.sidebar.selectbox("Jenis", ["D", "A"], index=0)
+col1, col2, col3 = st.columns(3)
 
-    tanggal_list = sorted(df["Tanggal"].dropna().dt.date.unique())
-    tanggal = st.sidebar.selectbox("Tanggal", tanggal_list)
+total = int(df_filtered["TotalKategori"].sum())
+jumlah_flight = len(df_filtered)
+rata2 = int(total / jumlah_flight) if jumlah_flight > 0 else 0
 
-    df_filtered = df[
-        (df["Maskapai"] == maskapai) &
-        (df["Jenis"] == jenis) &
-        (df["Tanggal"].dt.date == tanggal)
-    ]
+col1.metric("Total Penumpang", total)
+col2.metric("Jumlah Flight", jumlah_flight)
+col3.metric("Rata-rata / Flight", rata2)
 
-    st.subheader("Ringkasan")
-
-    col1, col2, col3 = st.columns(3)
-
-    total = int(df_filtered["Total"].sum())
-    jumlah_flight = len(df_filtered)
-    rata2 = int(total / jumlah_flight) if jumlah_flight > 0 else 0
-
-    col1.metric("Total Penumpang", total)
-    col2.metric("Jumlah Flight", jumlah_flight)
-    col3.metric("Rata-rata / Flight", rata2)
-
-    st.dataframe(df_filtered)
-
-    rekap = df[
-        (df["Maskapai"] == maskapai) &
-        (df["Jenis"] == jenis)
-    ].groupby(df["Tanggal"].dt.date)["Total"].sum()
-
-    st.line_chart(rekap)
-
-    st.download_button(
-        "Download CSV",
-        df_filtered.to_csv(index=False),
-        "hasil.csv"
-    )
-else:
-    st.info("Upload file Excel terlebih dahulu")
+# ========================
+# TABEL
+# ========================
+st.dataframe(df_filtered, use_container_width=True)

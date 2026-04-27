@@ -46,9 +46,23 @@ if uploaded_file:
 
     df = df.rename(columns=col_map)
 
+    # ========================
+    # VALIDASI WAJIB
+    # ========================
     if "Tanggal" not in df.columns or "Maskapai" not in df.columns:
-        st.error("Format file tidak dikenali")
+        st.error("Format file tidak dikenali (minimal harus ada Tanggal & Maskapai)")
+        st.write("Kolom terbaca:", df.columns.tolist())
         st.stop()
+
+    # ========================
+    # FIX KOLOM YANG TIDAK ADA (ANTI ERROR)
+    # ========================
+    if "Jenis" not in df.columns:
+        df["Jenis"] = "D"  # default keberangkatan
+
+    for col in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
+        if col not in df.columns:
+            df[col] = 0
 
     # ========================
     # FIX TANGGAL
@@ -57,7 +71,7 @@ if uploaded_file:
     df = df.dropna(subset=["Tanggal"])
 
     # ========================
-    # NORMALISASI (FIX UTAMA FILTER)
+    # NORMALISASI (FIX FILTER)
     # ========================
     df["Maskapai"] = df["Maskapai"].astype(str).str.strip().str.upper()
     df["Jenis"] = df["Jenis"].astype(str).str.strip().str.upper()
@@ -66,9 +80,6 @@ if uploaded_file:
     # NUMERIC
     # ========================
     for col in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
-        if col not in df.columns:
-            df[col] = 0
-
         if isinstance(df[col], pd.DataFrame):
             df[col] = df[col].iloc[:,0]
 
@@ -81,66 +92,45 @@ if uploaded_file:
     # ========================
     st.sidebar.header("⚙️ Filter")
 
-    maskapai_list = sorted(df["Maskapai"].dropna().unique())
-    maskapai = st.sidebar.selectbox("Maskapai", maskapai_list)
+    maskapai = st.sidebar.selectbox(
+        "Maskapai",
+        sorted(df["Maskapai"].dropna().unique())
+    )
 
     jenis = st.sidebar.selectbox("Jenis", ["D","A"])
 
     # ========================
     # MODE TANGGAL
     # ========================
-    mode_tanggal = st.sidebar.radio(
-        "Mode Tanggal",
-        ["1 Tanggal", "Rentang Tanggal"]
-    )
+    mode = st.sidebar.radio("Mode Tanggal", ["1 Tanggal","Rentang Tanggal"])
 
     min_date = df["Tanggal"].min().date()
     max_date = df["Tanggal"].max().date()
 
-    if mode_tanggal == "1 Tanggal":
-        single_date = st.sidebar.date_input(
-            "Pilih Tanggal",
-            value=min_date,
-            min_value=min_date,
-            max_value=max_date
-        )
-
-        start_date = pd.to_datetime(single_date)
-        end_date = pd.to_datetime(single_date)
+    if mode == "1 Tanggal":
+        d = st.sidebar.date_input("Pilih Tanggal", min_date)
+        start_date = pd.to_datetime(d)
+        end_date = pd.to_datetime(d)
 
     else:
-        date_range = st.sidebar.date_input(
-            "Pilih Rentang",
-            value=(min_date, max_date),
-            min_value=min_date,
-            max_value=max_date
-        )
+        dr = st.sidebar.date_input("Pilih Rentang", (min_date, max_date))
 
-        if isinstance(date_range, tuple) and len(date_range) == 2:
-            start_date = pd.to_datetime(date_range[0])
-            end_date = pd.to_datetime(date_range[1])
+        if isinstance(dr, tuple) and len(dr) == 2:
+            start_date = pd.to_datetime(dr[0])
+            end_date = pd.to_datetime(dr[1])
         else:
             start_date = pd.to_datetime(min_date)
             end_date = pd.to_datetime(max_date)
 
     # ========================
-    # KATEGORI
-    # ========================
-    kategori = st.sidebar.selectbox(
-        "Kategori",
-        ["Semua","Dewasa","Dewasa + Anak","Bayi","Transit","Kargo"]
-    )
-
-    # ========================
     # SEARCH
     # ========================
     st.sidebar.markdown("### 🔍 Pencarian")
-
-    search_input = st.sidebar.text_input("Cari data")
-    search_button = st.sidebar.button("🔍 Cari")
+    keyword = st.sidebar.text_input("Cari data")
+    cari = st.sidebar.button("🔍 Cari")
 
     # ========================
-    # FILTER DATA (FIX FINAL)
+    # FILTER DATA
     # ========================
     df_filtered = df[
         (df["Maskapai"].str.contains(maskapai, case=False, na=False)) &
@@ -149,16 +139,20 @@ if uploaded_file:
         (df["Tanggal"] <= end_date)
     ].copy()
 
-    # APPLY SEARCH
-    if search_button and search_input:
+    if cari and keyword:
         df_filtered = df_filtered[
             df_filtered.astype(str)
-            .apply(lambda row: row.str.contains(search_input, case=False).any(), axis=1)
+            .apply(lambda row: row.str.contains(keyword, case=False).any(), axis=1)
         ]
 
     # ========================
     # HASIL
     # ========================
+    kategori = st.sidebar.selectbox(
+        "Kategori",
+        ["Semua","Dewasa","Dewasa + Anak","Bayi","Transit","Kargo"]
+    )
+
     if kategori == "Dewasa":
         df_filtered["Hasil"] = df_filtered["Dewasa"]
     elif kategori == "Dewasa + Anak":
@@ -172,7 +166,7 @@ if uploaded_file:
     else:
         df_filtered["Hasil"] = df_filtered["Total"]
 
-    total_hasil = int(df_filtered["Hasil"].sum())
+    total = int(df_filtered["Hasil"].sum())
 
     # ========================
     # KPI
@@ -180,12 +174,11 @@ if uploaded_file:
     st.subheader("📊 KPI Utama")
 
     c1,c2,c3,c4,c5 = st.columns(5)
-
     c1.metric("Total Penumpang", int(df["Total"].sum()))
     c2.metric("Flight", len(df))
     c3.metric("Transit", int(df["Transit"].sum()))
     c4.metric("Kargo", int(df["Kargo"].sum()))
-    c5.metric("Hasil Pencarian", total_hasil)
+    c5.metric("Hasil Pencarian", total)
 
     # ========================
     # GRAFIK

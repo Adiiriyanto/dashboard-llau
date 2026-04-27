@@ -2,30 +2,12 @@ import streamlit as st
 import pandas as pd
 
 # ========================
-# CONFIG + STYLE
+# CONFIG
 # ========================
 st.set_page_config(page_title="LLAU Dashboard", layout="wide")
 
-st.markdown("""
-<style>
-.card {
-    background-color: #111827;
-    padding: 20px;
-    border-radius: 12px;
-    text-align: center;
-}
-.kpi-green { color: #22c55e; font-size: 28px; font-weight: bold; }
-.kpi-red { color: #ef4444; font-size: 28px; font-weight: bold; }
-.kpi-title { font-size: 14px; color: #9ca3af; }
-.big-number { font-size: 40px; font-weight: bold; color: #3b82f6; }
-</style>
-""", unsafe_allow_html=True)
-
 st.title("✈️ Dashboard LLAU Rendani Airport")
 
-# ========================
-# UPLOAD
-# ========================
 uploaded_file = st.file_uploader("Upload File Excel", type=["xlsx"])
 
 if uploaded_file:
@@ -92,31 +74,22 @@ if uploaded_file:
     df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"] + df["Transit"]
 
     # ========================
-    # SIDEBAR
+    # SIDEBAR FILTER
     # ========================
     st.sidebar.header("⚙️ Filter")
 
     maskapai = st.sidebar.selectbox("Maskapai", sorted(df["Maskapai"].dropna().unique()))
     jenis = st.sidebar.selectbox("Jenis", ["D","A"])
 
-    # ========================
-    # RANGE TANGGAL (FIX TOTAL)
-    # ========================
+    # DATE RANGE
     min_date = df["Tanggal"].min().date()
     max_date = df["Tanggal"].max().date()
 
-    date_input = st.sidebar.date_input(
-        "Rentang Tanggal",
-        value=(min_date, max_date)
-    )
+    date_input = st.sidebar.date_input("Rentang Tanggal", value=(min_date, max_date))
 
-    # HANDLE AMAN (INI FIX UTAMA)
     if isinstance(date_input, tuple):
-        if len(date_input) == 2:
-            start_date = pd.to_datetime(date_input[0])
-            end_date = pd.to_datetime(date_input[1])
-        else:
-            start_date = end_date = pd.to_datetime(date_input[0])
+        start_date = pd.to_datetime(date_input[0])
+        end_date = pd.to_datetime(date_input[1])
     else:
         start_date = end_date = pd.to_datetime(date_input)
 
@@ -126,7 +99,15 @@ if uploaded_file:
     )
 
     # ========================
-    # FILTER
+    # 🔍 SEARCH BAR (FITUR BARU)
+    # ========================
+    st.sidebar.markdown("### 🔍 Pencarian")
+
+    search_input = st.sidebar.text_input("Cari (maskapai / teks bebas)")
+    search_button = st.sidebar.button("🔍 Cari")
+
+    # ========================
+    # FILTER DATA DASAR
     # ========================
     df_filtered = df[
         (df["Maskapai"] == maskapai) &
@@ -134,6 +115,15 @@ if uploaded_file:
         (df["Tanggal"] >= start_date) &
         (df["Tanggal"] <= end_date)
     ].copy()
+
+    # ========================
+    # APPLY SEARCH (HANYA SAAT DIKLIK)
+    # ========================
+    if search_button and search_input:
+        df_filtered = df_filtered[
+            df_filtered.astype(str)
+            .apply(lambda row: row.str.contains(search_input, case=False).any(), axis=1)
+        ]
 
     # ========================
     # HASIL
@@ -167,12 +157,6 @@ if uploaded_file:
     c5.metric("Hasil Pencarian", total_hasil)
 
     # ========================
-    # HIGHLIGHT
-    # ========================
-    st.subheader("📌 Ringkasan Hasil Pencarian")
-    st.metric(f"Total {kategori}", total_hasil)
-
-    # ========================
     # GRAFIK
     # ========================
     st.subheader("📈 Tren Penumpang")
@@ -185,9 +169,6 @@ if uploaded_file:
     # TABEL
     # ========================
     st.subheader("📋 Detail Data")
-
-    cols = ["Hasil"] + [c for c in df_filtered.columns if c != "Hasil"]
-    df_filtered = df_filtered[cols]
 
     st.dataframe(df_filtered, use_container_width=True)
 

@@ -2,10 +2,33 @@ import streamlit as st
 import pandas as pd
 
 # ========================
-# CONFIG
+# STYLE (BI DASHBOARD)
 # ========================
 st.set_page_config(page_title="LLAU Dashboard", layout="wide")
 
+st.markdown("""
+<style>
+.card {
+    background-color: #111827;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
+    text-align: center;
+}
+.kpi-green { color: #22c55e; font-size: 28px; font-weight: bold; }
+.kpi-red { color: #ef4444; font-size: 28px; font-weight: bold; }
+.kpi-title { font-size: 14px; color: #9ca3af; }
+.big-number {
+    font-size: 40px;
+    font-weight: bold;
+    color: #3b82f6;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ========================
+# TITLE
+# ========================
 st.title("✈️ Dashboard LLAU Rendani Airport")
 
 # ========================
@@ -18,30 +41,22 @@ if uploaded_file:
     # ========================
     # LOAD DATA
     # ========================
-    try:
-        df = pd.read_excel(uploaded_file, skiprows=9)
-    except Exception as e:
-        st.error(f"Gagal membaca file: {e}")
-        st.stop()
+    df = pd.read_excel(uploaded_file, skiprows=9)
 
-    # ========================
-    # CLEAN HEADER
-    # ========================
     df.columns = [str(col).strip() for col in df.columns]
     df = df.loc[:, ~df.columns.duplicated()]
 
     # ========================
-    # AUTO MAPPING
+    # MAPPING
     # ========================
     col_map = {}
     for col in df.columns:
         c = col.lower()
-
         if "tanggal" in c:
             col_map[col] = "Tanggal"
         elif "maskapai" in c or "operator" in c:
             col_map[col] = "Maskapai"
-        elif "jenis" in c or "a/d" in c or "dep" in c:
+        elif "jenis" in c or "a/d" in c:
             col_map[col] = "Jenis"
         elif "dewasa" in c:
             col_map[col] = "Dewasa"
@@ -56,115 +71,89 @@ if uploaded_file:
 
     df = df.rename(columns=col_map)
 
-    # ========================
-    # VALIDASI
-    # ========================
-    if "Tanggal" not in df.columns or "Maskapai" not in df.columns:
-        st.error("Format file tidak dikenali")
-        st.write("Kolom terbaca:", df.columns.tolist())
-        st.stop()
-
-    # ========================
-    # NORMALISASI
-    # ========================
-    df = df[df["Tanggal"].notna()].copy()
-    df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce")
-
     if "Jenis" not in df.columns:
         df["Jenis"] = "D"
 
-    # ========================
-    # NUMERIC SAFE
-    # ========================
+    df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce")
+
     for col in ["Dewasa", "Anak", "Bayi", "Transit", "Kargo"]:
         if col not in df.columns:
             df[col] = 0
-
         if isinstance(df[col], pd.DataFrame):
             df[col] = df[col].iloc[:, 0]
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-        df[col] = df[col].fillna(0)
-
-    # ========================
-    # TOTAL
-    # ========================
     df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"] + df["Transit"]
 
     # ========================
-    # SIDEBAR FILTER
+    # SIDEBAR
     # ========================
     st.sidebar.header("⚙️ Filter")
 
-    maskapai_list = sorted(df["Maskapai"].dropna().unique())
-    maskapai = st.sidebar.selectbox("Maskapai", maskapai_list)
-
+    maskapai = st.sidebar.selectbox("Maskapai", sorted(df["Maskapai"].dropna().unique()))
     jenis = st.sidebar.selectbox("Jenis", ["D", "A"])
-
-    tanggal_list = sorted(df["Tanggal"].dt.date.dropna().unique())
-    tanggal = st.sidebar.selectbox("Tanggal", tanggal_list)
-
-    search = st.sidebar.text_input("🔎 Search")
-
-    kategori = st.sidebar.selectbox(
-        "Kategori Data",
-        ["Semua", "Dewasa", "Dewasa + Anak", "Bayi", "Transit", "Kargo"]
-    )
+    tanggal = st.sidebar.selectbox("Tanggal", sorted(df["Tanggal"].dt.date.unique()))
+    kategori = st.sidebar.selectbox("Kategori", ["Semua","Dewasa","Dewasa + Anak","Bayi","Transit","Kargo"])
 
     # ========================
-    # FILTER DATA
+    # FILTER
     # ========================
     df_filtered = df.copy()
-
     df_filtered = df_filtered[df_filtered["Maskapai"] == maskapai]
     df_filtered = df_filtered[df_filtered["Jenis"] == jenis]
     df_filtered = df_filtered[df_filtered["Tanggal"].dt.date == tanggal]
 
-    # SEARCH
-    if search:
-        df_filtered = df_filtered[
-            df_filtered.apply(
-                lambda x: x.astype(str).str.contains(search, case=False).any(),
-                axis=1
-            )
-        ]
-
     # ========================
-    # KOLOM HASIL (UTAMA)
+    # HASIL
     # ========================
     if kategori == "Dewasa":
         df_filtered["Hasil"] = df_filtered["Dewasa"]
-
     elif kategori == "Dewasa + Anak":
         df_filtered["Hasil"] = df_filtered["Dewasa"] + df_filtered["Anak"]
-
     elif kategori == "Bayi":
         df_filtered["Hasil"] = df_filtered["Bayi"]
-
     elif kategori == "Transit":
         df_filtered["Hasil"] = df_filtered["Transit"]
-
     elif kategori == "Kargo":
         df_filtered["Hasil"] = df_filtered["Kargo"]
-
     else:
         df_filtered["Hasil"] = df_filtered["Total"]
 
-    # untuk KPI
-    df_filtered["TotalKategori"] = df_filtered["Hasil"]
+    total_hasil = int(df_filtered["Hasil"].sum())
 
     # ========================
-    # KPI
+    # KPI UTAMA
     # ========================
     st.subheader("📊 KPI Utama")
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    k1, k2, k3, k4, k5 = st.columns(5)
 
-    col1.metric("Total Penumpang", int(df["Total"].sum()))
-    col2.metric("Filtered", int(df_filtered["TotalKategori"].sum()))
-    col3.metric("Flight", len(df))
-    col4.metric("Transit", int(df["Transit"].sum()))
-    col5.metric("Kargo", int(df["Kargo"].sum()))
+    k1.metric("Total Penumpang", int(df["Total"].sum()))
+    k2.metric("Flight", len(df))
+    k3.metric("Transit", int(df["Transit"].sum()))
+    k4.metric("Kargo", int(df["Kargo"].sum()))
+
+    # highlight naik/turun
+    color_class = "kpi-green" if total_hasil > 0 else "kpi-red"
+
+    k5.markdown(f"""
+    <div class="card">
+        <div class="kpi-title">Hasil Pencarian</div>
+        <div class="{color_class}">{total_hasil}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ========================
+    # HASIL BESAR (HIGHLIGHT)
+    # ========================
+    st.subheader("📌 Ringkasan Hasil Pencarian")
+
+    st.markdown(f"""
+    <div class="card">
+        <div class="kpi-title">Kategori: {kategori}</div>
+        <div class="big-number">{total_hasil}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # ========================
     # GRAFIK
@@ -175,33 +164,15 @@ if uploaded_file:
     st.subheader("📦 Tren Kargo")
     st.line_chart(df.groupby(df["Tanggal"].dt.date)["Kargo"].sum())
 
-    st.subheader("🏆 Top Maskapai")
-    st.bar_chart(
-        df.groupby("Maskapai")["Total"]
-        .sum()
-        .sort_values(ascending=False)
-        .head(5)
-    )
-
     # ========================
-    # TABLE
+    # TABEL
     # ========================
     st.subheader("📋 Detail Data")
 
-    # urutkan kolom hasil di depan
     cols = ["Hasil"] + [c for c in df_filtered.columns if c != "Hasil"]
     df_filtered = df_filtered[cols]
 
     st.dataframe(df_filtered, use_container_width=True)
 
-    # ========================
-    # DOWNLOAD
-    # ========================
-    st.download_button(
-        "⬇️ Download Data",
-        df_filtered.to_csv(index=False),
-        "hasil_dashboard.csv"
-    )
-
 else:
-    st.info("Silakan upload file Excel terlebih dahulu.")
+    st.info("Upload file Excel terlebih dahulu")

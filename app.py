@@ -4,10 +4,9 @@ import pandas as pd
 # ========================
 # CONFIG
 # ========================
-st.set_page_config(page_title="Dashboard Bandara", layout="wide")
+st.set_page_config(page_title="LLAU Dashboard", layout="wide")
 
-st.title("✈️ Dashboard Data LLAU Rendani Airport")
-
+st.title("✈️ Dashboard LLAU Rendani Airport")
 
 # ========================
 # UPLOAD
@@ -26,16 +25,15 @@ if uploaded_file:
         st.stop()
 
     # ========================
-    # CLEAN HEADER (WAJIB)
+    # CLEAN HEADER
     # ========================
     df.columns = [str(col).strip() for col in df.columns]
     df = df.loc[:, ~df.columns.duplicated()]
 
     # ========================
-    # MAPPING PRESISI + FLEX
+    # AUTO MAPPING
     # ========================
     col_map = {}
-
     for col in df.columns:
         c = col.lower()
 
@@ -67,7 +65,7 @@ if uploaded_file:
         st.stop()
 
     # ========================
-    # NORMALISASI DATA
+    # NORMALISASI
     # ========================
     df = df[df["Tanggal"].notna()].copy()
     df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce")
@@ -76,13 +74,12 @@ if uploaded_file:
         df["Jenis"] = "D"
 
     # ========================
-    # NUMERIC SAFE CONVERSION
+    # NUMERIC SAFE
     # ========================
     for col in ["Dewasa", "Anak", "Bayi", "Transit", "Kargo"]:
         if col not in df.columns:
             df[col] = 0
 
-        # Hindari error DataFrame (duplikat)
         if isinstance(df[col], pd.DataFrame):
             df[col] = df[col].iloc[:, 0]
 
@@ -115,18 +112,13 @@ if uploaded_file:
     )
 
     # ========================
-    # FILTER DATA (SAFE)
+    # FILTER DATA
     # ========================
     df_filtered = df.copy()
 
-    if "Maskapai" in df.columns:
-        df_filtered = df_filtered[df_filtered["Maskapai"] == maskapai]
-
-    if "Jenis" in df.columns:
-        df_filtered = df_filtered[df_filtered["Jenis"] == jenis]
-
-    if "Tanggal" in df.columns:
-        df_filtered = df_filtered[df_filtered["Tanggal"].dt.date == tanggal]
+    df_filtered = df_filtered[df_filtered["Maskapai"] == maskapai]
+    df_filtered = df_filtered[df_filtered["Jenis"] == jenis]
+    df_filtered = df_filtered[df_filtered["Tanggal"].dt.date == tanggal]
 
     # SEARCH
     if search:
@@ -138,25 +130,28 @@ if uploaded_file:
         ]
 
     # ========================
-    # KATEGORI
+    # KOLOM HASIL (UTAMA)
     # ========================
     if kategori == "Dewasa":
-        df_filtered["TotalKategori"] = df_filtered["Dewasa"]
+        df_filtered["Hasil"] = df_filtered["Dewasa"]
 
     elif kategori == "Dewasa + Anak":
-        df_filtered["TotalKategori"] = df_filtered["Dewasa"] + df_filtered["Anak"]
+        df_filtered["Hasil"] = df_filtered["Dewasa"] + df_filtered["Anak"]
 
     elif kategori == "Bayi":
-        df_filtered["TotalKategori"] = df_filtered["Bayi"]
+        df_filtered["Hasil"] = df_filtered["Bayi"]
 
     elif kategori == "Transit":
-        df_filtered["TotalKategori"] = df_filtered["Transit"]
+        df_filtered["Hasil"] = df_filtered["Transit"]
 
     elif kategori == "Kargo":
-        df_filtered["TotalKategori"] = df_filtered["Kargo"]
+        df_filtered["Hasil"] = df_filtered["Kargo"]
 
     else:
-        df_filtered["TotalKategori"] = df_filtered["Total"]
+        df_filtered["Hasil"] = df_filtered["Total"]
+
+    # untuk KPI
+    df_filtered["TotalKategori"] = df_filtered["Hasil"]
 
     # ========================
     # KPI
@@ -188,13 +183,15 @@ if uploaded_file:
         .head(5)
     )
 
-    st.subheader("🧭 Distribusi D vs A")
-    st.bar_chart(df.groupby("Jenis")["Total"].sum())
-
     # ========================
     # TABLE
     # ========================
     st.subheader("📋 Detail Data")
+
+    # urutkan kolom hasil di depan
+    cols = ["Hasil"] + [c for c in df_filtered.columns if c != "Hasil"]
+    df_filtered = df_filtered[cols]
+
     st.dataframe(df_filtered, use_container_width=True)
 
     # ========================
@@ -207,4 +204,4 @@ if uploaded_file:
     )
 
 else:
-    st.info("Silakan upload file Excel LLAU terlebih dahulu.")
+    st.info("Silakan upload file Excel terlebih dahulu.")

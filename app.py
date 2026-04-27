@@ -21,7 +21,7 @@ if uploaded_file:
     df = df.loc[:, ~df.columns.duplicated()]
 
     # ========================
-    # MAPPING
+    # MAPPING KOLOM
     # ========================
     col_map = {}
     for col in df.columns:
@@ -78,36 +78,68 @@ if uploaded_file:
     # ========================
     st.sidebar.header("⚙️ Filter")
 
-    maskapai = st.sidebar.selectbox("Maskapai", sorted(df["Maskapai"].dropna().unique()))
+    maskapai = st.sidebar.selectbox(
+        "Maskapai",
+        sorted(df["Maskapai"].dropna().unique())
+    )
+
     jenis = st.sidebar.selectbox("Jenis", ["D","A"])
 
-    # DATE RANGE
+    # ========================
+    # MODE TANGGAL (FIX FINAL)
+    # ========================
+    mode_tanggal = st.sidebar.radio(
+        "Mode Tanggal",
+        ["1 Tanggal", "Rentang Tanggal"]
+    )
+
     min_date = df["Tanggal"].min().date()
     max_date = df["Tanggal"].max().date()
 
-    date_input = st.sidebar.date_input("Rentang Tanggal", value=(min_date, max_date))
+    if mode_tanggal == "1 Tanggal":
+        single_date = st.sidebar.date_input(
+            "Pilih Tanggal",
+            value=min_date,
+            min_value=min_date,
+            max_value=max_date
+        )
 
-    if isinstance(date_input, tuple):
-        start_date = pd.to_datetime(date_input[0])
-        end_date = pd.to_datetime(date_input[1])
+        start_date = pd.to_datetime(single_date)
+        end_date = pd.to_datetime(single_date)
+
     else:
-        start_date = end_date = pd.to_datetime(date_input)
+        date_range = st.sidebar.date_input(
+            "Pilih Rentang",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date
+        )
 
+        if isinstance(date_range, tuple) and len(date_range) == 2:
+            start_date = pd.to_datetime(date_range[0])
+            end_date = pd.to_datetime(date_range[1])
+        else:
+            start_date = pd.to_datetime(min_date)
+            end_date = pd.to_datetime(max_date)
+
+    # ========================
+    # KATEGORI
+    # ========================
     kategori = st.sidebar.selectbox(
         "Kategori",
         ["Semua","Dewasa","Dewasa + Anak","Bayi","Transit","Kargo"]
     )
 
     # ========================
-    # 🔍 SEARCH BAR (FITUR BARU)
+    # SEARCH
     # ========================
     st.sidebar.markdown("### 🔍 Pencarian")
 
-    search_input = st.sidebar.text_input("Cari (maskapai / teks bebas)")
+    search_input = st.sidebar.text_input("Cari data")
     search_button = st.sidebar.button("🔍 Cari")
 
     # ========================
-    # FILTER DATA DASAR
+    # FILTER DATA
     # ========================
     df_filtered = df[
         (df["Maskapai"] == maskapai) &
@@ -116,9 +148,7 @@ if uploaded_file:
         (df["Tanggal"] <= end_date)
     ].copy()
 
-    # ========================
-    # APPLY SEARCH (HANYA SAAT DIKLIK)
-    # ========================
+    # SEARCH APPLY
     if search_button and search_input:
         df_filtered = df_filtered[
             df_filtered.astype(str)

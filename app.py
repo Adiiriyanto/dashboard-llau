@@ -1,30 +1,23 @@
 import streamlit as st
 import pandas as pd
 
-# ========================
-# CONFIG
-# ========================
 st.set_page_config(page_title="LLAU Dashboard", layout="wide")
-
 st.title("✈️ Dashboard LLAU Rendani Airport")
 
-# ========================
-# UPLOAD
-# ========================
 uploaded_file = st.file_uploader("Upload File Excel", type=["xlsx"])
 
 if uploaded_file:
 
     # ========================
-    # LOAD DATA
+    # LOAD
     # ========================
     df = pd.read_excel(uploaded_file, skiprows=9)
 
-    df.columns = [str(col).strip() for col in df.columns]
+    df.columns = [str(c).strip() for c in df.columns]
     df = df.loc[:, ~df.columns.duplicated()]
 
     # ========================
-    # AUTO MAPPING
+    # MAPPING
     # ========================
     col_map = {}
     for col in df.columns:
@@ -49,13 +42,12 @@ if uploaded_file:
 
     df = df.rename(columns=col_map)
 
-    # VALIDASI
-    if "Tanggal" not in df.columns or "Maskapai" not in df.columns:
-        st.error("Format file tidak dikenali")
+    if "Tanggal" not in df.columns:
+        st.error("Kolom Tanggal tidak ditemukan")
         st.stop()
 
     # ========================
-    # FIX TANGGAL (FINAL)
+    # 🔥 FIX TANGGAL (PALING AMAN)
     # ========================
     df["Tanggal"] = pd.to_datetime(
         df["Tanggal"],
@@ -63,20 +55,17 @@ if uploaded_file:
         dayfirst=True
     )
 
-    df = df[df["Tanggal"].notna()]
-
-    # 🔥 UBAH KE DATE SAJA (INI KUNCI FIX)
-    df["Tanggal"] = df["Tanggal"].dt.date
+    df = df.dropna(subset=["Tanggal"])
 
     # ========================
     # NUMERIC
     # ========================
-    for col in ["Dewasa", "Anak", "Bayi", "Transit", "Kargo"]:
+    for col in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
         if col not in df.columns:
             df[col] = 0
 
         if isinstance(df[col], pd.DataFrame):
-            df[col] = df[col].iloc[:, 0]
+            df[col] = df[col].iloc[:,0]
 
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
@@ -88,31 +77,29 @@ if uploaded_file:
     # ========================
     # SIDEBAR
     # ========================
-    st.sidebar.header("⚙️ Filter")
+    st.sidebar.header("Filter")
 
-    maskapai = st.sidebar.selectbox("Maskapai", sorted(df["Maskapai"].unique()))
-    jenis = st.sidebar.selectbox("Jenis", ["D", "A"])
+    maskapai = st.sidebar.selectbox("Maskapai", sorted(df["Maskapai"].dropna().unique()))
+    jenis = st.sidebar.selectbox("Jenis", ["D","A"])
 
     # ========================
-    # RANGE DATE (FINAL FIX)
+    # 🔥 DATE RANGE FIX TOTAL
     # ========================
-    min_date = min(df["Tanggal"])
-    max_date = max(df["Tanggal"])
+    min_date = df["Tanggal"].min()
+    max_date = df["Tanggal"].max()
 
     date_input = st.sidebar.date_input(
         "Rentang Tanggal",
-        value=(min_date, max_date),
-        min_value=min_date,
-        max_value=max_date
+        value=(min_date.date(), max_date.date())
     )
 
-    # HANDLE SEMUA KONDISI
+    # handle aman
     if isinstance(date_input, tuple) and len(date_input) == 2:
-        start_date, end_date = date_input
-    elif date_input:
-        start_date = end_date = date_input
+        start_date = pd.Timestamp(date_input[0])
+        end_date = pd.Timestamp(date_input[1])
     else:
-        start_date, end_date = min_date, max_date
+        start_date = pd.Timestamp(date_input)
+        end_date = pd.Timestamp(date_input)
 
     kategori = st.sidebar.selectbox(
         "Kategori",
@@ -120,7 +107,7 @@ if uploaded_file:
     )
 
     # ========================
-    # FILTER DATA (100% AMAN)
+    # 🔥 FILTER (100% FIX)
     # ========================
     df_filtered = df[
         (df["Maskapai"] == maskapai) &
@@ -150,40 +137,25 @@ if uploaded_file:
     # ========================
     # KPI
     # ========================
-    st.subheader("📊 KPI Utama")
+    st.subheader("KPI")
 
-    c1, c2, c3, c4, c5 = st.columns(5)
+    c1,c2,c3,c4,c5 = st.columns(5)
 
     c1.metric("Total Penumpang", int(df["Total"].sum()))
     c2.metric("Flight", len(df))
     c3.metric("Transit", int(df["Transit"].sum()))
     c4.metric("Kargo", int(df["Kargo"].sum()))
-    c5.metric("Hasil Pencarian", total_hasil)
-
-    # ========================
-    # HIGHLIGHT
-    # ========================
-    st.subheader("📌 Ringkasan Hasil Pencarian")
-    st.metric(f"Total {kategori}", total_hasil)
+    c5.metric("Hasil", total_hasil)
 
     # ========================
     # GRAFIK
     # ========================
-    st.subheader("📈 Tren Penumpang")
-    st.line_chart(df.groupby("Tanggal")["Total"].sum())
-
-    st.subheader("📦 Tren Kargo")
-    st.line_chart(df.groupby("Tanggal")["Kargo"].sum())
+    st.line_chart(df.groupby(df["Tanggal"].dt.date)["Total"].sum())
 
     # ========================
     # TABEL
     # ========================
-    st.subheader("📋 Detail Data")
-
-    cols = ["Hasil"] + [c for c in df_filtered.columns if c != "Hasil"]
-    df_filtered = df_filtered[cols]
-
-    st.dataframe(df_filtered, use_container_width=True)
+    st.dataframe(df_filtered)
 
 else:
-    st.info("Upload file Excel terlebih dahulu")
+    st.info("Upload file Excel dulu")

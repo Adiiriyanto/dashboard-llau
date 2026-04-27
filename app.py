@@ -35,7 +35,7 @@ if uploaded_file:
     # ========================
     df = pd.read_excel(uploaded_file, skiprows=9)
 
-    # Bersihkan header
+    # CLEAN HEADER
     df.columns = [str(col).strip() for col in df.columns]
     df = df.loc[:, ~df.columns.duplicated()]
 
@@ -65,27 +65,21 @@ if uploaded_file:
 
     df = df.rename(columns=col_map)
 
-    # ========================
     # VALIDASI
-    # ========================
     if "Tanggal" not in df.columns or "Maskapai" not in df.columns:
         st.error("Format file tidak dikenali")
-        st.write("Kolom terbaca:", df.columns.tolist())
         st.stop()
 
     # ========================
-    # NORMALISASI TANGGAL (FIX UTAMA)
+    # FIX TANGGAL (ANTI ERROR)
     # ========================
     df["Tanggal"] = pd.to_datetime(
         df["Tanggal"],
         errors="coerce",
-        dayfirst=True  # 🔥 penting
+        dayfirst=True
     )
 
     df = df[df["Tanggal"].notna()]
-
-    if "Jenis" not in df.columns:
-        df["Jenis"] = "D"
 
     # ========================
     # NUMERIC SAFE
@@ -99,41 +93,33 @@ if uploaded_file:
 
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    # ========================
-    # TOTAL
-    # ========================
+    if "Jenis" not in df.columns:
+        df["Jenis"] = "D"
+
     df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"] + df["Transit"]
 
     # ========================
-    # SIDEBAR FILTER
+    # SIDEBAR
     # ========================
     st.sidebar.header("⚙️ Filter")
 
-    maskapai = st.sidebar.selectbox(
-        "Maskapai",
-        sorted(df["Maskapai"].dropna().unique())
-    )
-
+    maskapai = st.sidebar.selectbox("Maskapai", sorted(df["Maskapai"].unique()))
     jenis = st.sidebar.selectbox("Jenis", ["D", "A"])
 
     # ========================
-    # RANGE TANGGAL (FITUR BARU)
+    # RANGE DATE FIX (INI KUNCI)
     # ========================
-    min_date = df["Tanggal"].min().date()
-    max_date = df["Tanggal"].max().date()
+    min_date = df["Tanggal"].min()
+    max_date = df["Tanggal"].max()
 
-    date_range = st.sidebar.date_input(
+    start_date, end_date = st.sidebar.date_input(
         "Rentang Tanggal",
-        value=(min_date, max_date),
-        min_value=min_date,
-        max_value=max_date
+        value=(min_date, max_date)
     )
 
-    # handle jika user pilih 1 tanggal saja
-    if isinstance(date_range, tuple) and len(date_range) == 2:
-        start_date, end_date = date_range
-    else:
-        start_date = end_date = date_range
+    # convert ke datetime biar aman
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
 
     kategori = st.sidebar.selectbox(
         "Kategori",
@@ -141,13 +127,13 @@ if uploaded_file:
     )
 
     # ========================
-    # FILTER DATA
+    # FILTER DATA (FIX TOTAL)
     # ========================
     df_filtered = df[
         (df["Maskapai"] == maskapai) &
         (df["Jenis"] == jenis) &
-        (df["Tanggal"].dt.date >= start_date) &
-        (df["Tanggal"].dt.date <= end_date)
+        (df["Tanggal"] >= start_date) &
+        (df["Tanggal"] <= end_date)
     ].copy()
 
     # ========================
@@ -190,7 +176,7 @@ if uploaded_file:
     """, unsafe_allow_html=True)
 
     # ========================
-    # RINGKASAN BESAR
+    # HIGHLIGHT
     # ========================
     st.subheader("📌 Ringkasan Hasil Pencarian")
 

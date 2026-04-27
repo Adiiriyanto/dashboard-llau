@@ -79,7 +79,7 @@ if file:
     col_anak = find("anak")
     col_bayi = find("bayi")
 
-    # 🔥 DETEKSI TRANSIT DEWASA
+    # Transit dewasa
     col_transit_dewasa = None
     for c in df.columns:
         if "transit" in c and "dewasa" in c:
@@ -147,7 +147,7 @@ if file:
 
     kategori = st.sidebar.selectbox(
         "Kategori",
-        ["Semua","Dewasa","PJP2U","Bayi","Transit","Kargo"]
+        ["Semua","Dewasa","Anak","PJP2U","Bayi","Transit","Kargo"]
     )
 
     # =========================
@@ -166,6 +166,8 @@ if file:
     # =========================
     if kategori == "Dewasa":
         f["Hasil"] = f["Dewasa_Bersih"]
+    elif kategori == "Anak":
+        f["Hasil"] = f["Anak"]   # 🔥 kategori baru
     elif kategori == "PJP2U":
         f["Hasil"] = f["PJP2U"]
     elif kategori == "Bayi":

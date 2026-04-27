@@ -13,7 +13,7 @@ uploaded_file = st.file_uploader("Upload File Excel", type=["xlsx"])
 if uploaded_file:
 
     # ========================
-    # LOAD DATA
+    # LOAD
     # ========================
     df = pd.read_excel(uploaded_file, skiprows=9)
 
@@ -21,7 +21,7 @@ if uploaded_file:
     df = df.loc[:, ~df.columns.duplicated()]
 
     # ========================
-    # MAPPING KOLOM
+    # MAPPING
     # ========================
     col_map = {}
     for col in df.columns:
@@ -46,43 +46,22 @@ if uploaded_file:
 
     df = df.rename(columns=col_map)
 
-    # ========================
-    # VALIDASI WAJIB
-    # ========================
-    if "Tanggal" not in df.columns or "Maskapai" not in df.columns:
-        st.error("Format file tidak dikenali (minimal harus ada Tanggal & Maskapai)")
-        st.write("Kolom terbaca:", df.columns.tolist())
+    if "Tanggal" not in df.columns:
+        st.error("Kolom Tanggal tidak ditemukan")
         st.stop()
 
     # ========================
-    # FIX KOLOM YANG TIDAK ADA (ANTI ERROR)
-    # ========================
-    if "Jenis" not in df.columns:
-        df["Jenis"] = "D"  # default keberangkatan
-
-    for col in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
-        if col not in df.columns:
-            df[col] = 0
-
-    # ========================
-    # FIX TANGGAL
+    # FIX DATA
     # ========================
     df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce", dayfirst=True)
     df = df.dropna(subset=["Tanggal"])
 
-    # ========================
-    # NORMALISASI (FIX FILTER)
-    # ========================
-    df["Maskapai"] = df["Maskapai"].astype(str).str.strip().str.upper()
-    df["Jenis"] = df["Jenis"].astype(str).str.strip().str.upper()
+    df["Maskapai"] = df.get("Maskapai", "UNKNOWN").astype(str).str.strip().str.upper()
+    df["Jenis"] = df.get("Jenis", "D").astype(str).str.strip().str.upper()
 
-    # ========================
-    # NUMERIC
-    # ========================
     for col in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
-        if isinstance(df[col], pd.DataFrame):
-            df[col] = df[col].iloc[:,0]
-
+        if col not in df.columns:
+            df[col] = 0
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
     df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"] + df["Transit"]
@@ -92,28 +71,31 @@ if uploaded_file:
     # ========================
     st.sidebar.header("⚙️ Filter")
 
+    # OPTIONAL FILTER (INI KUNCI)
     maskapai = st.sidebar.selectbox(
-        "Maskapai",
-        sorted(df["Maskapai"].dropna().unique())
+        "Maskapai (Opsional)",
+        ["SEMUA"] + sorted(df["Maskapai"].unique())
     )
 
-    jenis = st.sidebar.selectbox("Jenis", ["D","A"])
+    jenis = st.sidebar.selectbox(
+        "Jenis (Opsional)",
+        ["SEMUA", "D", "A"]
+    )
 
     # ========================
     # MODE TANGGAL
     # ========================
-    mode = st.sidebar.radio("Mode Tanggal", ["1 Tanggal","Rentang Tanggal"])
+    mode = st.sidebar.radio("Mode Tanggal", ["1 Tanggal","Rentang"])
 
     min_date = df["Tanggal"].min().date()
     max_date = df["Tanggal"].max().date()
 
     if mode == "1 Tanggal":
-        d = st.sidebar.date_input("Pilih Tanggal", min_date)
+        d = st.sidebar.date_input("Tanggal", min_date)
         start_date = pd.to_datetime(d)
         end_date = pd.to_datetime(d)
-
     else:
-        dr = st.sidebar.date_input("Pilih Rentang", (min_date, max_date))
+        dr = st.sidebar.date_input("Rentang", (min_date, max_date))
 
         if isinstance(dr, tuple) and len(dr) == 2:
             start_date = pd.to_datetime(dr[0])
@@ -126,23 +108,29 @@ if uploaded_file:
     # SEARCH
     # ========================
     st.sidebar.markdown("### 🔍 Pencarian")
-    keyword = st.sidebar.text_input("Cari data")
+    keyword = st.sidebar.text_input("Cari bebas")
     cari = st.sidebar.button("🔍 Cari")
 
     # ========================
-    # FILTER DATA
+    # FILTER DATA (FLEXIBLE)
     # ========================
-    df_filtered = df[
-        (df["Maskapai"].str.contains(maskapai, case=False, na=False)) &
-        (df["Jenis"].str.contains(jenis, case=False, na=False)) &
-        (df["Tanggal"] >= start_date) &
-        (df["Tanggal"] <= end_date)
-    ].copy()
+    df_filtered = df.copy()
+
+    if maskapai != "SEMUA":
+        df_filtered = df_filtered[df_filtered["Maskapai"].str.contains(maskapai)]
+
+    if jenis != "SEMUA":
+        df_filtered = df_filtered[df_filtered["Jenis"] == jenis]
+
+    df_filtered = df_filtered[
+        (df_filtered["Tanggal"] >= start_date) &
+        (df_filtered["Tanggal"] <= end_date)
+    ]
 
     if cari and keyword:
         df_filtered = df_filtered[
             df_filtered.astype(str)
-            .apply(lambda row: row.str.contains(keyword, case=False).any(), axis=1)
+            .apply(lambda x: x.str.contains(keyword, case=False).any(), axis=1)
         ]
 
     # ========================
@@ -150,12 +138,12 @@ if uploaded_file:
     # ========================
     kategori = st.sidebar.selectbox(
         "Kategori",
-        ["Semua","Dewasa","Dewasa + Anak","Bayi","Transit","Kargo"]
+        ["Semua","Dewasa","Dewasa+Anak","Bayi","Transit","Kargo"]
     )
 
     if kategori == "Dewasa":
         df_filtered["Hasil"] = df_filtered["Dewasa"]
-    elif kategori == "Dewasa + Anak":
+    elif kategori == "Dewasa+Anak":
         df_filtered["Hasil"] = df_filtered["Dewasa"] + df_filtered["Anak"]
     elif kategori == "Bayi":
         df_filtered["Hasil"] = df_filtered["Bayi"]
@@ -172,13 +160,18 @@ if uploaded_file:
     # KPI
     # ========================
     st.subheader("📊 KPI Utama")
+    c1,c2,c3,c4 = st.columns(4)
 
-    c1,c2,c3,c4,c5 = st.columns(5)
     c1.metric("Total Penumpang", int(df["Total"].sum()))
     c2.metric("Flight", len(df))
     c3.metric("Transit", int(df["Transit"].sum()))
     c4.metric("Kargo", int(df["Kargo"].sum()))
-    c5.metric("Hasil Pencarian", total)
+
+    # ========================
+    # 🔥 HASIL PENCARIAN (BALIK LAGI)
+    # ========================
+    st.subheader("📌 Hasil Pencarian")
+    st.metric("Total Hasil", total)
 
     # ========================
     # GRAFIK
@@ -186,13 +179,10 @@ if uploaded_file:
     st.subheader("📈 Tren Penumpang")
     st.line_chart(df.groupby(df["Tanggal"].dt.date)["Total"].sum())
 
-    st.subheader("📦 Tren Kargo")
-    st.line_chart(df.groupby(df["Tanggal"].dt.date)["Kargo"].sum())
-
     # ========================
     # TABEL
     # ========================
-    st.subheader("📋 Detail Data")
+    st.subheader("📋 Data Detail")
     st.dataframe(df_filtered, use_container_width=True)
 
 else:

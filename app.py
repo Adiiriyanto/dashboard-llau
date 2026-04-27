@@ -21,7 +21,7 @@ if uploaded_file:
     df = df.loc[:, ~df.columns.duplicated()]
 
     # ========================
-    # MAPPING
+    # AUTO MAPPING
     # ========================
     col_map = {}
     for col in df.columns:
@@ -47,7 +47,7 @@ if uploaded_file:
     df = df.rename(columns=col_map)
 
     # ========================
-    # VALIDASI
+    # VALIDASI MINIMAL
     # ========================
     if "Tanggal" not in df.columns or "Maskapai" not in df.columns:
         st.error("Format file tidak dikenali")
@@ -55,10 +55,10 @@ if uploaded_file:
         st.stop()
 
     # ========================
-    # FIX KOLOM (ANTI ERROR)
+    # FIX KOLOM
     # ========================
     if "Jenis" not in df.columns:
-        df["Jenis"] = "D"  # default aman
+        df["Jenis"] = "D"
 
     for col in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
         if col not in df.columns:
@@ -71,13 +71,13 @@ if uploaded_file:
     df = df.dropna(subset=["Tanggal"])
 
     # ========================
-    # NORMALISASI (WAJIB)
+    # NORMALISASI
     # ========================
     df["Maskapai"] = df["Maskapai"].astype(str).str.strip().str.upper()
     df["Jenis"] = df["Jenis"].astype(str).str.strip().str.upper()
 
     # ========================
-    # NUMERIC
+    # FIX NUMERIC (PENTING)
     # ========================
     for col in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
         if isinstance(df[col], pd.DataFrame):
@@ -88,7 +88,7 @@ if uploaded_file:
     df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"] + df["Transit"]
 
     # ========================
-    # SIDEBAR
+    # SIDEBAR FILTER
     # ========================
     st.sidebar.header("⚙️ Filter")
 
@@ -97,10 +97,13 @@ if uploaded_file:
         sorted(df["Maskapai"].unique())
     )
 
-    jenis = st.sidebar.selectbox("Jenis", ["SEMUA","D","A"])
+    jenis = st.sidebar.selectbox(
+        "Jenis",
+        ["SEMUA","D","A"]
+    )
 
     # ========================
-    # TANGGAL MODE
+    # MODE TANGGAL
     # ========================
     mode = st.sidebar.radio("Mode Tanggal", ["1 Tanggal","Rentang"])
 
@@ -111,7 +114,6 @@ if uploaded_file:
         d = st.sidebar.date_input("Tanggal", min_date)
         start_date = pd.to_datetime(d)
         end_date = pd.to_datetime(d)
-
     else:
         dr = st.sidebar.date_input("Rentang", (min_date, max_date))
 
@@ -129,7 +131,7 @@ if uploaded_file:
     cari = st.sidebar.button("Cari")
 
     # ========================
-    # FILTER DATA (FLEKSIBEL)
+    # FILTER DATA
     # ========================
     df_filtered = df.copy()
 
@@ -154,7 +156,7 @@ if uploaded_file:
         ]
 
     # ========================
-    # HASIL
+    # KATEGORI HASIL
     # ========================
     kategori = st.sidebar.selectbox(
         "Kategori",
@@ -174,7 +176,14 @@ if uploaded_file:
     else:
         df_filtered["Hasil"] = df_filtered["Total"]
 
-    total = int(df_filtered["Hasil"].sum())
+    # ========================
+    # FIX TOTAL (ANTI BUG)
+    # ========================
+    total = int(
+        pd.to_numeric(df_filtered["Hasil"], errors="coerce")
+        .fillna(0)
+        .sum()
+    )
 
     # ========================
     # KPI
@@ -182,16 +191,20 @@ if uploaded_file:
     st.subheader("📊 KPI Utama")
 
     c1,c2,c3,c4 = st.columns(4)
+
     c1.metric("Total Penumpang", int(df["Total"].sum()))
     c2.metric("Flight", len(df))
     c3.metric("Transit", int(df["Transit"].sum()))
     c4.metric("Kargo", int(df["Kargo"].sum()))
 
     # ========================
-    # HASIL PENCARIAN (BALIK LAGI)
+    # HASIL PENCARIAN
     # ========================
     st.subheader("📌 Hasil Pencarian")
     st.metric("Total Hasil", total)
+
+    # DEBUG (hapus nanti kalau sudah yakin)
+    # st.write(df_filtered[["Dewasa","Anak","Bayi","Hasil"]].head())
 
     if df_filtered.empty:
         st.warning("⚠️ Data tidak ditemukan, cek filter Anda")

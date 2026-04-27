@@ -66,7 +66,7 @@ if uploaded_file:
     df = df.rename(columns=col_map)
 
     # ========================
-    # VALIDASI WAJIB
+    # VALIDASI
     # ========================
     if "Tanggal" not in df.columns or "Maskapai" not in df.columns:
         st.error("Format file tidak dikenali")
@@ -74,10 +74,15 @@ if uploaded_file:
         st.stop()
 
     # ========================
-    # NORMALISASI
+    # NORMALISASI TANGGAL (FIX UTAMA)
     # ========================
-    df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce")
-    df = df[df["Tanggal"].notna()]  # buang NaT
+    df["Tanggal"] = pd.to_datetime(
+        df["Tanggal"],
+        errors="coerce",
+        dayfirst=True  # 🔥 penting
+    )
+
+    df = df[df["Tanggal"].notna()]
 
     if "Jenis" not in df.columns:
         df["Jenis"] = "D"
@@ -104,15 +109,31 @@ if uploaded_file:
     # ========================
     st.sidebar.header("⚙️ Filter")
 
-    maskapai = st.sidebar.selectbox("Maskapai", sorted(df["Maskapai"].dropna().unique()))
+    maskapai = st.sidebar.selectbox(
+        "Maskapai",
+        sorted(df["Maskapai"].dropna().unique())
+    )
+
     jenis = st.sidebar.selectbox("Jenis", ["D", "A"])
 
-    tanggal_list = sorted(df["Tanggal"].dt.date.unique())
-    tanggal = st.sidebar.selectbox(
-        "Tanggal",
-        tanggal_list,
-        format_func=lambda x: x.strftime("%d-%m-%Y")
+    # ========================
+    # RANGE TANGGAL (FITUR BARU)
+    # ========================
+    min_date = df["Tanggal"].min().date()
+    max_date = df["Tanggal"].max().date()
+
+    date_range = st.sidebar.date_input(
+        "Rentang Tanggal",
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date
     )
+
+    # handle jika user pilih 1 tanggal saja
+    if isinstance(date_range, tuple) and len(date_range) == 2:
+        start_date, end_date = date_range
+    else:
+        start_date = end_date = date_range
 
     kategori = st.sidebar.selectbox(
         "Kategori",
@@ -125,7 +146,8 @@ if uploaded_file:
     df_filtered = df[
         (df["Maskapai"] == maskapai) &
         (df["Jenis"] == jenis) &
-        (df["Tanggal"].dt.date == tanggal)
+        (df["Tanggal"].dt.date >= start_date) &
+        (df["Tanggal"].dt.date <= end_date)
     ].copy()
 
     # ========================
@@ -147,7 +169,7 @@ if uploaded_file:
     total_hasil = int(df_filtered["Hasil"].sum())
 
     # ========================
-    # KPI UTAMA
+    # KPI
     # ========================
     st.subheader("📊 KPI Utama")
 
@@ -168,7 +190,7 @@ if uploaded_file:
     """, unsafe_allow_html=True)
 
     # ========================
-    # HASIL BESAR
+    # RINGKASAN BESAR
     # ========================
     st.subheader("📌 Ringkasan Hasil Pencarian")
 

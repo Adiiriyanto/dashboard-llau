@@ -8,26 +8,67 @@ import re
 st.set_page_config(layout="wide")
 
 # =========================
-# HEADER + RESET BUTTON
+# CUSTOM STYLE (PRO LEVEL)
+# =========================
+st.markdown("""
+<style>
+.stApp {
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+}
+
+section[data-testid="stSidebar"] {
+    background-color: #111827;
+}
+
+/* KPI Card */
+.metric-card {
+    background: #1f2937;
+    padding: 15px;
+    border-radius: 12px;
+    text-align: center;
+    border: 1px solid #374151;
+}
+
+/* KPI Number */
+.metric-value {
+    font-size: 28px;
+    font-weight: bold;
+}
+
+/* Colors */
+.green { color: #22c55e; }
+.red { color: #ef4444; }
+.blue { color: #3b82f6; }
+.orange { color: #f59e0b; }
+
+/* Title */
+h1, h2, h3 {
+    color: #e5e7eb;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =========================
+# HEADER
 # =========================
 col1, col2 = st.columns([8,2])
 
 with col1:
-    st.title("✈️ Evaluasi Data LLAU Rendani Airport")
+    st.title("✈️ Dashboard Operasional LLAU Rendani Airport")
 
 with col2:
-    if st.button("🔄 Upload Data Baru"):
+    if st.button("🔄 Reset"):
         st.rerun()
 
 # =========================
-# UPLOAD FILE
+# UPLOAD
 # =========================
-file = st.file_uploader("Upload File Excel (Format Standar)", type=["xlsx"])
+file = st.file_uploader("Upload Data Excel", type=["xlsx"])
 
 if file:
 
     # =========================
-    # LOAD DATA (AUTO FLEXIBLE)
+    # LOAD DATA
     # =========================
     try:
         df = pd.read_excel(file, header=[0,1])
@@ -36,92 +77,72 @@ if file:
         df = pd.read_excel(file)
         multi = False
 
-    # =========================
-    # NORMALISASI HEADER
-    # =========================
-    def clean_text(x):
-        x = str(x)
-        x = re.sub(r'\s+', ' ', x)
-        return x.strip().lower()
+    def clean(x):
+        return re.sub(r'\s+', ' ', str(x)).strip().lower()
 
     if multi:
-        df.columns = [
-            clean_text(a) + "_" + clean_text(b)
-            for a,b in df.columns
-        ]
+        df.columns = [clean(a) + "_" + clean(b) for a,b in df.columns]
     else:
-        df.columns = [clean_text(c) for c in df.columns]
+        df.columns = [clean(c) for c in df.columns]
 
-    # =========================
-    # CARI KOLOM OTOMATIS
-    # =========================
-    def find(keyword):
-        for col in df.columns:
-            if keyword in col:
-                return col
+    def find(k):
+        for c in df.columns:
+            if k in c:
+                return c
         return None
 
-    col_tanggal = find("tanggal")
-    col_maskapai = find("operator") or find("maskapai")
-    col_jenis = find("pergerakan") or find("jenis")
+    col_tgl = find("tanggal")
+    col_mask = find("operator") or find("maskapai")
+    col_jns = find("pergerakan") or find("jenis")
 
-    col_dewasa = find("dewasa")
+    col_dew = find("dewasa")
     col_anak = find("anak")
     col_bayi = find("bayi")
     col_transit = find("transit")
     col_kargo = find("kargo")
 
-    # =========================
-    # VALIDASI
-    # =========================
-    if not col_tanggal or not col_maskapai:
-        st.error("Format Excel tidak sesuai")
-        st.write("Kolom terbaca:", df.columns)
+    if not col_tgl or not col_mask:
+        st.error("Format tidak dikenali")
+        st.write(df.columns)
         st.stop()
 
-    # =========================
-    # BENTUK DATA BERSIH
-    # =========================
-    clean = pd.DataFrame()
-
-    clean["Tanggal"] = df[col_tanggal]
-    clean["Maskapai"] = df[col_maskapai]
-    clean["Jenis"] = df[col_jenis] if col_jenis else "D"
-
-    clean["Dewasa"] = df[col_dewasa] if col_dewasa else 0
-    clean["Anak"] = df[col_anak] if col_anak else 0
-    clean["Bayi"] = df[col_bayi] if col_bayi else 0
-    clean["Transit"] = df[col_transit] if col_transit else 0
-    clean["Kargo"] = df[col_kargo] if col_kargo else 0
-
-    df = clean.copy()
+    data = pd.DataFrame({
+        "Tanggal": df[col_tgl],
+        "Maskapai": df[col_mask],
+        "Jenis": df[col_jns] if col_jns else "D",
+        "Dewasa": df[col_dew] if col_dew else 0,
+        "Anak": df[col_anak] if col_anak else 0,
+        "Bayi": df[col_bayi] if col_bayi else 0,
+        "Transit": df[col_transit] if col_transit else 0,
+        "Kargo": df[col_kargo] if col_kargo else 0
+    })
 
     # =========================
-    # FIX DATA
+    # CLEAN DATA
     # =========================
-    df["Tanggal"] = pd.to_datetime(df["Tanggal"], dayfirst=True, errors="coerce")
-    df = df.dropna(subset=["Tanggal"])
+    data["Tanggal"] = pd.to_datetime(data["Tanggal"], errors="coerce", dayfirst=True)
+    data = data.dropna(subset=["Tanggal"])
 
-    df["Maskapai"] = df["Maskapai"].astype(str).str.upper().str.strip()
-    df["Jenis"] = df["Jenis"].astype(str).str.upper().str.strip()
+    data["Maskapai"] = data["Maskapai"].astype(str).str.upper().str.strip()
+    data["Jenis"] = data["Jenis"].astype(str).str.upper().str.strip()
 
-    for col in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    for c in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
+        data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
 
-    df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"] + df["Transit"]
+    data["Total"] = data["Dewasa"] + data["Anak"] + data["Bayi"] + data["Transit"]
 
     # =========================
-    # SIDEBAR FILTER
+    # SIDEBAR
     # =========================
     st.sidebar.header("Filter")
 
-    maskapai = st.sidebar.selectbox("Maskapai", sorted(df["Maskapai"].unique()))
+    maskapai = st.sidebar.selectbox("Maskapai", sorted(data["Maskapai"].unique()))
     jenis = st.sidebar.selectbox("Jenis", ["SEMUA","D","A"])
 
     mode = st.sidebar.radio("Tanggal", ["1 Hari","Rentang"])
 
-    min_d = df["Tanggal"].min().date()
-    max_d = df["Tanggal"].max().date()
+    min_d = data["Tanggal"].min().date()
+    max_d = data["Tanggal"].max().date()
 
     if mode == "1 Hari":
         d = st.sidebar.date_input("Tanggal", min_d)
@@ -129,15 +150,8 @@ if file:
         end = start
     else:
         dr = st.sidebar.date_input("Rentang", (min_d, max_d))
-        if isinstance(dr, tuple):
-            start = pd.to_datetime(dr[0])
-            end = pd.to_datetime(dr[1])
-        else:
-            start = pd.to_datetime(min_d)
-            end = pd.to_datetime(max_d)
-
-    keyword = st.sidebar.text_input("🔍 Search")
-    btn = st.sidebar.button("Cari")
+        start = pd.to_datetime(dr[0])
+        end = pd.to_datetime(dr[1])
 
     kategori = st.sidebar.selectbox(
         "Kategori",
@@ -145,10 +159,9 @@ if file:
     )
 
     # =========================
-    # FILTER DATA
+    # FILTER
     # =========================
-    f = df.copy()
-
+    f = data.copy()
     f = f[f["Maskapai"] == maskapai]
 
     if jenis != "SEMUA":
@@ -156,14 +169,8 @@ if file:
 
     f = f[(f["Tanggal"] >= start) & (f["Tanggal"] <= end)]
 
-    if btn and keyword:
-        f = f[
-            f.astype(str)
-            .apply(lambda r: r.str.contains(keyword, case=False).any(), axis=1)
-        ]
-
     # =========================
-    # HITUNG HASIL
+    # HASIL
     # =========================
     if kategori == "Dewasa":
         f["Hasil"] = f["Dewasa"]
@@ -181,30 +188,40 @@ if file:
     total = int(f["Hasil"].sum())
 
     # =========================
-    # KPI
+    # KPI CARDS
     # =========================
     st.subheader("📊 KPI Utama")
 
-    c1,c2,c3,c4 = st.columns(4)
-    c1.metric("Total Penumpang", int(df["Total"].sum()))
-    c2.metric("Flight", len(df))
-    c3.metric("Transit", int(df["Transit"].sum()))
-    c4.metric("Kargo", int(df["Kargo"].sum()))
+    c1, c2, c3, c4 = st.columns(4)
+
+    def card(title, value, color):
+        st.markdown(f"""
+        <div class="metric-card">
+            <div>{title}</div>
+            <div class="metric-value {color}">{value}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c1:
+        card("Total Penumpang", int(data["Total"].sum()), "blue")
+    with c2:
+        card("Flight", len(data), "orange")
+    with c3:
+        card("Transit", int(data["Transit"].sum()), "green")
+    with c4:
+        card("Kargo", int(data["Kargo"].sum()), "red")
 
     # =========================
-    # HASIL PENCARIAN
+    # HASIL
     # =========================
     st.subheader("📌 Hasil Pencarian")
-    st.metric("Total Hasil", total)
-
-    if f.empty:
-        st.warning("Data tidak ditemukan")
+    card("Total Hasil", total, "green" if total > 0 else "red")
 
     # =========================
     # GRAFIK
     # =========================
     st.subheader("📈 Tren Penumpang")
-    st.line_chart(df.groupby(df["Tanggal"].dt.date)["Total"].sum())
+    st.line_chart(data.groupby(data["Tanggal"].dt.date)["Total"].sum())
 
     # =========================
     # TABEL
@@ -213,4 +230,4 @@ if file:
     st.dataframe(f, use_container_width=True)
 
 else:
-    st.info("Silakan upload file Excel terlebih dahulu")
+    st.info("Upload file Excel untuk mulai")

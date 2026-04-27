@@ -8,48 +8,87 @@ st.set_page_config(page_title="LLAU Dashboard", layout="wide")
 
 st.title("✈️ Dashboard LLAU Rendani Airport")
 
-uploaded_file = st.file_uploader("Upload File Excel LLAU", type=["xlsx"])
+uploaded_file = st.file_uploader("Upload File Excel", type=["xlsx"])
 
 if uploaded_file:
 
     # ========================
-    # LOAD DATA (FORMAT LLAU)
+    # LOAD DATA
     # ========================
     df = pd.read_excel(uploaded_file, skiprows=9)
 
-    df.columns = df.columns.str.strip()
+    df.columns = [str(c).strip() for c in df.columns]
+    df = df.loc[:, ~df.columns.duplicated()]
 
     # ========================
-    # VALIDASI KOLOM WAJIB
+    # MAPPING
     # ========================
-    required_cols = [
-        "Tanggal","Maskapai","Jenis",
-        "Dewasa","Anak","Bayi","Transit","Kargo"
-    ]
+    col_map = {}
+    for col in df.columns:
+        c = col.lower()
 
-    missing = [c for c in required_cols if c not in df.columns]
+        if "tanggal" in c:
+            col_map[col] = "Tanggal"
+        elif "maskapai" in c or "operator" in c:
+            col_map[col] = "Maskapai"
+        elif "jenis" in c or "a/d" in c:
+            col_map[col] = "Jenis"
+        elif "dewasa" in c:
+            col_map[col] = "Dewasa"
+        elif "anak" in c:
+            col_map[col] = "Anak"
+        elif "bayi" in c:
+            col_map[col] = "Bayi"
+        elif "transit" in c:
+            col_map[col] = "Transit"
+        elif "cargo" in c or "kargo" in c:
+            col_map[col] = "Kargo"
 
-    if missing:
-        st.error(f"Kolom tidak lengkap: {missing}")
-        st.write("Kolom tersedia:", df.columns.tolist())
+    df = df.rename(columns=col_map)
+
+    # ========================
+    # VALIDASI
+    # ========================
+    if "Tanggal" not in df.columns or "Maskapai" not in df.columns:
+        st.error("Format file tidak dikenali")
+        st.write("Kolom terbaca:", df.columns.tolist())
         st.stop()
 
     # ========================
-    # FIX DATA
+    # FIX KOLOM (ANTI ERROR)
     # ========================
-    df["Tanggal"] = pd.to_datetime(df["Tanggal"], dayfirst=True, errors="coerce")
+    if "Jenis" not in df.columns:
+        df["Jenis"] = "D"  # default aman
+
+    for col in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
+        if col not in df.columns:
+            df[col] = 0
+
+    # ========================
+    # FIX TANGGAL
+    # ========================
+    df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce", dayfirst=True)
     df = df.dropna(subset=["Tanggal"])
 
+    # ========================
+    # NORMALISASI (WAJIB)
+    # ========================
     df["Maskapai"] = df["Maskapai"].astype(str).str.strip().str.upper()
     df["Jenis"] = df["Jenis"].astype(str).str.strip().str.upper()
 
+    # ========================
+    # NUMERIC
+    # ========================
     for col in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
+        if isinstance(df[col], pd.DataFrame):
+            df[col] = df[col].iloc[:,0]
+
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
     df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"] + df["Transit"]
 
     # ========================
-    # SIDEBAR FILTER
+    # SIDEBAR
     # ========================
     st.sidebar.header("⚙️ Filter")
 
@@ -58,18 +97,12 @@ if uploaded_file:
         sorted(df["Maskapai"].unique())
     )
 
-    jenis = st.sidebar.selectbox(
-        "Jenis",
-        ["SEMUA","D","A"]
-    )
+    jenis = st.sidebar.selectbox("Jenis", ["SEMUA","D","A"])
 
     # ========================
-    # MODE TANGGAL
+    # TANGGAL MODE
     # ========================
-    mode = st.sidebar.radio(
-        "Mode Tanggal",
-        ["1 Tanggal","Rentang"]
-    )
+    mode = st.sidebar.radio("Mode Tanggal", ["1 Tanggal","Rentang"])
 
     min_date = df["Tanggal"].min().date()
     max_date = df["Tanggal"].max().date()
@@ -96,17 +129,17 @@ if uploaded_file:
     cari = st.sidebar.button("Cari")
 
     # ========================
-    # FILTER DATA (PRESISI)
+    # FILTER DATA (FLEKSIBEL)
     # ========================
     df_filtered = df.copy()
 
     df_filtered = df_filtered[
-        df_filtered["Maskapai"] == maskapai
+        df_filtered["Maskapai"].str.contains(maskapai, na=False)
     ]
 
     if jenis != "SEMUA":
         df_filtered = df_filtered[
-            df_filtered["Jenis"] == jenis
+            df_filtered["Jenis"].str.contains(jenis, na=False)
         ]
 
     df_filtered = df_filtered[
@@ -121,7 +154,7 @@ if uploaded_file:
         ]
 
     # ========================
-    # KATEGORI HASIL
+    # HASIL
     # ========================
     kategori = st.sidebar.selectbox(
         "Kategori",
@@ -149,20 +182,19 @@ if uploaded_file:
     st.subheader("📊 KPI Utama")
 
     c1,c2,c3,c4 = st.columns(4)
-
     c1.metric("Total Penumpang", int(df["Total"].sum()))
     c2.metric("Flight", len(df))
     c3.metric("Transit", int(df["Transit"].sum()))
     c4.metric("Kargo", int(df["Kargo"].sum()))
 
     # ========================
-    # HASIL PENCARIAN
+    # HASIL PENCARIAN (BALIK LAGI)
     # ========================
     st.subheader("📌 Hasil Pencarian")
     st.metric("Total Hasil", total)
 
     if df_filtered.empty:
-        st.warning("⚠️ Data tidak ditemukan, cek filter")
+        st.warning("⚠️ Data tidak ditemukan, cek filter Anda")
 
     # ========================
     # GRAFIK

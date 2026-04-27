@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import re
 
+# =========================
+# CONFIG
+# =========================
 st.set_page_config(layout="wide")
 
 # =========================
@@ -76,15 +79,13 @@ if file:
     col_anak = find("anak")
     col_bayi = find("bayi")
 
-    # 🔥 DETEKSI TRANSIT DEWASA KHUSUS
+    # 🔥 DETEKSI TRANSIT DEWASA
     col_transit_dewasa = None
     for c in df.columns:
         if "transit" in c and "dewasa" in c:
             col_transit_dewasa = c
 
-    # fallback kalau tidak ada
     col_transit_total = find("transit")
-
     col_kargo = find("kargo")
 
     if not col_tgl or not col_mask:
@@ -117,17 +118,13 @@ if file:
         data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
 
     # =========================
-    # 🔥 PERHITUNGAN FINAL
+    # PERHITUNGAN FINAL
     # =========================
-
-    # ✔ Dewasa bersih (FIX ANDA)
     data["Dewasa_Bersih"] = (data["Dewasa"] - data["Transit_Dewasa"]).clip(lower=0)
-
-    # ✔ Total penumpang tetap pakai transit total
-    data["Total_Penumpang"] = ((data["Dewasa"] + data["Anak"]) - data["Transit_Total"]).clip(lower=0)
+    data["PJP2U"] = ((data["Dewasa"] + data["Anak"]) - data["Transit_Total"]).clip(lower=0)
 
     # =========================
-    # FILTER
+    # SIDEBAR
     # =========================
     st.sidebar.header("Filter")
 
@@ -150,7 +147,7 @@ if file:
 
     kategori = st.sidebar.selectbox(
         "Kategori",
-        ["Semua","Dewasa","Dewasa + Anak","Bayi","Transit","Kargo"]
+        ["Semua","Dewasa","PJP2U","Bayi","Transit","Kargo"]
     )
 
     # =========================
@@ -168,9 +165,9 @@ if file:
     # HASIL
     # =========================
     if kategori == "Dewasa":
-        f["Hasil"] = f["Dewasa_Bersih"]   # 🔥 FIX UTAMA
-    elif kategori == "Dewasa + Anak":
-        f["Hasil"] = f["Total_Penumpang"]
+        f["Hasil"] = f["Dewasa_Bersih"]
+    elif kategori == "PJP2U":
+        f["Hasil"] = f["PJP2U"]
     elif kategori == "Bayi":
         f["Hasil"] = f["Bayi"]
     elif kategori == "Transit":
@@ -178,7 +175,7 @@ if file:
     elif kategori == "Kargo":
         f["Hasil"] = f["Kargo"]
     else:
-        f["Hasil"] = f["Total_Penumpang"]
+        f["Hasil"] = f["PJP2U"]
 
     total = int(f["Hasil"].sum())
 
@@ -198,7 +195,7 @@ if file:
         """, unsafe_allow_html=True)
 
     with c1:
-        card("Total Penumpang", int(data["Total_Penumpang"].sum()), "blue")
+        card("Total PJP2U", int(data["PJP2U"].sum()), "blue")
     with c2:
         card("Flight", len(data), "orange")
     with c3:
@@ -215,8 +212,8 @@ if file:
     # =========================
     # GRAFIK
     # =========================
-    st.subheader("📈 Tren Penumpang")
-    st.line_chart(data.groupby(data["Tanggal"].dt.date)["Total_Penumpang"].sum())
+    st.subheader("📈 Tren PJP2U")
+    st.line_chart(data.groupby(data["Tanggal"].dt.date)["PJP2U"].sum())
 
     # =========================
     # TABEL

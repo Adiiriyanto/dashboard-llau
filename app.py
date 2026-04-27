@@ -6,8 +6,8 @@ import pandas as pd
 # ========================
 st.set_page_config(page_title="Dashboard Bandara", layout="wide")
 
-st.title("✈️ Dashboard Operasional Bandara")
-st.caption("Penumpang & Kargo (Stabil & Anti Error)")
+st.title("✈️ Dashboard Data LLAU Rendani Airport")
+
 
 # ========================
 # UPLOAD

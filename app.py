@@ -14,16 +14,28 @@ st.markdown("""
 <style>
 .stApp { background: linear-gradient(135deg, #0f172a, #1e293b); }
 section[data-testid="stSidebar"] { background-color: #111827; }
+
 .metric-card {
-    background: #1f2937; padding: 15px; border-radius: 12px;
-    text-align: center; border: 1px solid #374151;
+    background: #1f2937;
+    padding: 15px;
+    border-radius: 12px;
+    text-align: center;
+    border: 1px solid #374151;
 }
-.metric-value { font-size: 28px; font-weight: bold; }
+
+.metric-value {
+    font-size: 28px;
+    font-weight: bold;
+}
+
 .green { color: #22c55e; }
 .red { color: #ef4444; }
 .blue { color: #3b82f6; }
 .orange { color: #f59e0b; }
-h1, h2, h3 { color: #e5e7eb; }
+
+h1, h2, h3 {
+    color: #e5e7eb;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -31,8 +43,10 @@ h1, h2, h3 { color: #e5e7eb; }
 # HEADER
 # =========================
 col1, col2 = st.columns([8,2])
+
 with col1:
-    st.title("✈️ Dashboard Rekonsiliasi Data LLAU Rendani Airport")
+    st.title("✈️ Dashboard Operasional LLAU Rendani Airport")
+
 with col2:
     if st.button("🔄 Reset"):
         st.rerun()
@@ -79,7 +93,7 @@ if file:
     col_anak = find("anak")
     col_bayi = find("bayi")
 
-    # Transit dewasa
+    # Transit Dewasa
     col_transit_dewasa = None
     for c in df.columns:
         if "transit" in c and "dewasa" in c:
@@ -167,7 +181,7 @@ if file:
     if kategori == "Dewasa":
         f["Hasil"] = f["Dewasa_Bersih"]
     elif kategori == "Anak":
-        f["Hasil"] = f["Anak"]   # 🔥 kategori baru
+        f["Hasil"] = f["Anak"]
     elif kategori == "PJP2U":
         f["Hasil"] = f["PJP2U"]
     elif kategori == "Bayi":
@@ -222,6 +236,16 @@ if file:
     # =========================
     st.subheader("📋 Detail Data")
     st.dataframe(f, use_container_width=True)
+
+    # =========================
+    # FOOTER RESMI
+    # =========================
+    st.markdown("""
+    <hr style="margin-top:50px;">
+    <p style='text-align: center; color: #9ca3af; font-size: 13px;'>
+    Copyright © 2026 Data UPBU Rendani Airport
+    </p>
+    """, unsafe_allow_html=True)
 
 else:
     st.info("Upload file Excel untuk mulai")

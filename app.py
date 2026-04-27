@@ -62,6 +62,9 @@ file = st.file_uploader("Upload Data Excel", type=["xlsx"])
 
 if file:
 
+    # =========================
+    # LOAD EXCEL (MULTI HEADER SAFE)
+    # =========================
     try:
         df = pd.read_excel(file, header=[0,1])
         multi = True
@@ -69,6 +72,9 @@ if file:
         df = pd.read_excel(file)
         multi = False
 
+    # =========================
+    # CLEAN HEADER
+    # =========================
     def clean(x):
         return re.sub(r'\s+', ' ', str(x)).strip().lower()
 
@@ -77,51 +83,51 @@ if file:
     else:
         df.columns = [clean(c) for c in df.columns]
 
-    def find(k):
-        for c in df.columns:
-            if k in c:
-                return c
-        return None
-
     # =========================
-    # DETEKSI KOLOM (FIX FLIGHT)
+    # DETEKSI KOLOM
     # =========================
-    col_tgl = find("tanggal")
-    col_mask = find("operator") or find("maskapai")
-    col_jns = find("pergerakan") or find("jenis")
+    def find_all(keyword):
+        return [c for c in df.columns if keyword in c]
 
-    # 🔥 FIX FLIGHT (TANPA "no")
+    col_tgl = next((c for c in df.columns if "tanggal" in c), None)
+    col_mask = next((c for c in df.columns if "maskapai" in c or "operator" in c), None)
+    col_jns = next((c for c in df.columns if "pergerakan" in c or "jenis" in c), None)
+
+    # 🔥 DETEKSI KHUSUS NOMOR PENERBANGAN (MULTI HEADER)
     col_flight = None
     for c in df.columns:
-        if any(k in c for k in ["flight", "penerbangan", "flt"]):
+        if "nomor" in c and "penerbangan" in c:
             col_flight = c
             break
 
-    col_dew = find("dewasa")
-    col_anak = find("anak")
-    col_bayi = find("bayi")
+    # fallback kalau tidak ketemu
+    if not col_flight:
+        for c in df.columns:
+            if "flight" in c:
+                col_flight = c
+                break
 
-    col_transit_dewasa = None
-    for c in df.columns:
-        if "transit" in c and "dewasa" in c:
-            col_transit_dewasa = c
+    col_dew = next((c for c in df.columns if "dewasa" in c), None)
+    col_anak = next((c for c in df.columns if "anak" in c), None)
+    col_bayi = next((c for c in df.columns if "bayi" in c), None)
 
-    col_transit_total = find("transit")
-    col_kargo = find("kargo")
+    col_transit_dewasa = next((c for c in df.columns if "transit" in c and "dewasa" in c), None)
+    col_transit_total = next((c for c in df.columns if "transit" in c), None)
+    col_kargo = next((c for c in df.columns if "kargo" in c), None)
 
     if not col_tgl or not col_mask:
-        st.error("Format tidak dikenali")
+        st.error("Format file tidak dikenali")
         st.write(df.columns)
         st.stop()
 
     # =========================
-    # DATAFRAME
+    # DATAFRAME NORMALISASI
     # =========================
     data = pd.DataFrame({
         "Tanggal": df[col_tgl],
         "Maskapai": df[col_mask],
         "Pergerakan": df[col_jns] if col_jns else "D",
-        "No Flight": df[col_flight] if col_flight else "UNKNOWN",
+        "No Flight Raw": df[col_flight] if col_flight else "",
         "Dewasa": df[col_dew] if col_dew else 0,
         "Anak": df[col_anak] if col_anak else 0,
         "Bayi": df[col_bayi] if col_bayi else 0,
@@ -137,25 +143,28 @@ if file:
     data = data.dropna(subset=["Tanggal"])
 
     data["Pergerakan"] = data["Pergerakan"].astype(str).str.upper().str.strip()
-    data["Pergerakan"] = data["Pergerakan"].replace({
-        "D": "Departure",
-        "A": "Arrival"
-    })
+    data["Pergerakan"] = data["Pergerakan"].replace({"D": "Departure", "A": "Arrival"})
 
-    # 🔥 FIX FLIGHT VALUE
-    data["No Flight"] = data["No Flight"].astype(str).str.upper().str.strip()
+    # =========================
+    # 🔥 PARSE NOMOR PENERBANGAN (FINAL FIX)
+    # =========================
+    def extract_flight(x):
+        if pd.isna(x):
+            return "UNKNOWN"
+        x = str(x).upper().strip()
+        match = re.search(r'[A-Z]{1,3}[0-9]{2,4}', x)
+        return match.group(0) if match else "UNKNOWN"
 
-    # hapus karakter aneh → jadi JT941
-    data["No Flight"] = data["No Flight"].str.replace(r'[^A-Z0-9]', '', regex=True)
+    data["No Flight"] = data["No Flight Raw"].apply(extract_flight)
 
-    # kalau isinya angka/tanggal → jadi UNKNOWN
-    data.loc[data["No Flight"].str.len() < 3, "No Flight"] = "UNKNOWN"
-
+    # =========================
+    # NUMERIC SAFE
+    # =========================
     for c in ["Dewasa","Anak","Bayi","Transit_Dewasa","Transit_Total","Kargo"]:
         data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
 
     # =========================
-    # HITUNGAN
+    # PERHITUNGAN
     # =========================
     data["Dewasa_Bersih"] = (data["Dewasa"] - data["Transit_Dewasa"]).clip(lower=0)
     data["PJP2U"] = ((data["Dewasa"] + data["Anak"]) - data["Transit_Total"]).clip(lower=0)

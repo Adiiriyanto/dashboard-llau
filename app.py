@@ -24,7 +24,7 @@ if uploaded_file:
     df = df.loc[:, ~df.columns.duplicated()]
 
     # ========================
-    # MAPPING
+    # AUTO MAPPING
     # ========================
     col_map = {}
     for col in df.columns:
@@ -55,10 +55,18 @@ if uploaded_file:
         st.stop()
 
     # ========================
-    # FIX TANGGAL
+    # FIX TANGGAL (FINAL)
     # ========================
-    df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce", dayfirst=True)
+    df["Tanggal"] = pd.to_datetime(
+        df["Tanggal"],
+        errors="coerce",
+        dayfirst=True
+    )
+
     df = df[df["Tanggal"].notna()]
+
+    # 🔥 UBAH KE DATE SAJA (INI KUNCI FIX)
+    df["Tanggal"] = df["Tanggal"].dt.date
 
     # ========================
     # NUMERIC
@@ -86,10 +94,10 @@ if uploaded_file:
     jenis = st.sidebar.selectbox("Jenis", ["D", "A"])
 
     # ========================
-    # DATE RANGE FIX TOTAL
+    # RANGE DATE (FINAL FIX)
     # ========================
-    min_date = df["Tanggal"].min().date()
-    max_date = df["Tanggal"].max().date()
+    min_date = min(df["Tanggal"])
+    max_date = max(df["Tanggal"])
 
     date_input = st.sidebar.date_input(
         "Rentang Tanggal",
@@ -98,7 +106,7 @@ if uploaded_file:
         max_value=max_date
     )
 
-    # HANDLE SEMUA KONDISI (INI KUNCI)
+    # HANDLE SEMUA KONDISI
     if isinstance(date_input, tuple) and len(date_input) == 2:
         start_date, end_date = date_input
     elif date_input:
@@ -106,17 +114,13 @@ if uploaded_file:
     else:
         start_date, end_date = min_date, max_date
 
-    # convert ke datetime
-    start_date = pd.to_datetime(start_date)
-    end_date = pd.to_datetime(end_date)
-
     kategori = st.sidebar.selectbox(
         "Kategori",
         ["Semua","Dewasa","Dewasa + Anak","Bayi","Transit","Kargo"]
     )
 
     # ========================
-    # FILTER DATA
+    # FILTER DATA (100% AMAN)
     # ========================
     df_filtered = df[
         (df["Maskapai"] == maskapai) &
@@ -166,10 +170,10 @@ if uploaded_file:
     # GRAFIK
     # ========================
     st.subheader("📈 Tren Penumpang")
-    st.line_chart(df.groupby(df["Tanggal"].dt.date)["Total"].sum())
+    st.line_chart(df.groupby("Tanggal")["Total"].sum())
 
     st.subheader("📦 Tren Kargo")
-    st.line_chart(df.groupby(df["Tanggal"].dt.date)["Kargo"].sum())
+    st.line_chart(df.groupby("Tanggal")["Kargo"].sum())
 
     # ========================
     # TABEL

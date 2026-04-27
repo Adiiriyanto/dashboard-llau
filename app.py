@@ -4,13 +4,13 @@ import pandas as pd
 # ========================
 # CONFIG
 # ========================
-st.set_page_config(page_title="Dashboard LLAU", layout="wide")
+st.set_page_config(page_title="Dashboard Bandara LLAU", layout="wide")
 
-st.title("📊 Dashboard Penumpang LLAU")
-st.caption("Default: Lion Air (Berangkat) — fleksibel untuk semua maskapai")
+st.title("✈️ Dashboard Operasional Bandara")
+st.caption("Analisis Penumpang & Kargo")
 
 # ========================
-# UPLOAD FILE
+# UPLOAD
 # ========================
 uploaded_file = st.file_uploader("Upload File Excel LLAU", type=["xlsx"])
 
@@ -26,19 +26,37 @@ if uploaded_file:
         st.stop()
 
     # ========================
-    # RENAME KOLOM (AMAN)
+    # AUTO DETECT KOLOM
     # ========================
-    try:
-        df = df.rename(columns={
-            df.columns[1]: "Tanggal",
-            df.columns[8]: "Maskapai",
-            df.columns[17]: "Jenis",
-            df.columns[18]: "Dewasa",
-            df.columns[19]: "Anak",
-            df.columns[20]: "Bayi"
-        })
-    except:
-        st.error("Struktur file tidak sesuai format LLAU")
+    col_map = {}
+
+    for col in df.columns:
+        c = str(col).lower()
+
+        if "tanggal" in c:
+            col_map[col] = "Tanggal"
+        elif "maskapai" in c or "operator" in c:
+            col_map[col] = "Maskapai"
+        elif "jenis" in c:
+            col_map[col] = "Jenis"
+        elif "dewasa" in c:
+            col_map[col] = "Dewasa"
+        elif "anak" in c:
+            col_map[col] = "Anak"
+        elif "bayi" in c:
+            col_map[col] = "Bayi"
+        elif "transit" in c:
+            col_map[col] = "Transit"
+        elif "cargo" in c or "kargo" in c:
+            col_map[col] = "Kargo"
+
+    df = df.rename(columns=col_map)
+
+    # ========================
+    # VALIDASI KOLOM WAJIB
+    # ========================
+    if "Tanggal" not in df.columns or "Maskapai" not in df.columns:
+        st.error("Format file tidak dikenali (kolom utama tidak ditemukan)")
         st.stop()
 
     # ========================
@@ -47,57 +65,31 @@ if uploaded_file:
     df = df[df["Tanggal"].notna()].copy()
     df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce")
 
-    # Pastikan kolom numerik aman
-    for col in ["Dewasa", "Anak", "Bayi"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-        else:
+    for col in ["Dewasa", "Anak", "Bayi", "Transit", "Kargo"]:
+        if col not in df.columns:
             df[col] = 0
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    # Total
-    df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"]
-
-    # ========================
-    # AUTO DETECT LION AIR
-    # ========================
-    default_maskapai = None
-    for m in df["Maskapai"].dropna().unique():
-        if "LION" in str(m).upper():
-            default_maskapai = m
-            break
-
-    if default_maskapai is None:
-        default_maskapai = df["Maskapai"].dropna().unique()[0]
+    df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"] + df["Transit"]
 
     # ========================
-    # SIDEBAR (FILTER)
+    # SIDEBAR FILTER
     # ========================
-    st.sidebar.header("⚙️ Filter Data")
+    st.sidebar.header("⚙️ Filter")
 
-    maskapai_list = df["Maskapai"].dropna().unique().tolist()
+    maskapai_list = sorted(df["Maskapai"].dropna().unique())
+    maskapai = st.sidebar.selectbox("Maskapai", maskapai_list)
 
-    maskapai = st.sidebar.selectbox(
-        "Maskapai",
-        maskapai_list,
-        index=maskapai_list.index(default_maskapai)
-    )
+    jenis = st.sidebar.selectbox("Jenis", ["D", "A"])
 
-    jenis = st.sidebar.selectbox("Jenis", ["D", "A"], index=0)
-
-    tanggal_list = sorted(df["Tanggal"].dropna().dt.date.unique())
-
+    tanggal_list = sorted(df["Tanggal"].dt.date.dropna().unique())
     tanggal = st.sidebar.selectbox("Tanggal", tanggal_list)
 
-    # ========================
-    # SEARCH & KATEGORI
-    # ========================
-    st.sidebar.subheader("🔎 Pencarian")
-    search = st.sidebar.text_input("Cari (maskapai / flight / dll)")
+    search = st.sidebar.text_input("🔎 Search")
 
-    st.sidebar.subheader("🎯 Kategori Penumpang")
     kategori = st.sidebar.selectbox(
-        "Pilih Kategori",
-        ["Semua", "Dewasa", "Dewasa + Anak", "Bayi"]
+        "Kategori Data",
+        ["Semua", "Dewasa", "Dewasa + Anak", "Bayi", "Transit", "Kargo"]
     )
 
     # ========================
@@ -109,13 +101,10 @@ if uploaded_file:
         (df["Tanggal"].dt.date == tanggal)
     ].copy()
 
-    # ========================
-    # APPLY SEARCH
-    # ========================
     if search:
         df_filtered = df_filtered[
             df_filtered.apply(
-                lambda row: row.astype(str).str.contains(search, case=False).any(),
+                lambda x: x.astype(str).str.contains(search, case=False).any(),
                 axis=1
             )
         ]
@@ -125,57 +114,70 @@ if uploaded_file:
     # ========================
     if kategori == "Dewasa":
         df_filtered["TotalKategori"] = df_filtered["Dewasa"]
-
     elif kategori == "Dewasa + Anak":
         df_filtered["TotalKategori"] = df_filtered["Dewasa"] + df_filtered["Anak"]
-
     elif kategori == "Bayi":
         df_filtered["TotalKategori"] = df_filtered["Bayi"]
-
+    elif kategori == "Transit":
+        df_filtered["TotalKategori"] = df_filtered["Transit"]
+    elif kategori == "Kargo":
+        df_filtered["TotalKategori"] = df_filtered["Kargo"]
     else:
         df_filtered["TotalKategori"] = df_filtered["Total"]
 
     # ========================
     # KPI
     # ========================
-    st.subheader("📌 Ringkasan")
+    st.subheader("📊 KPI Utama")
 
-    col1, col2, col3 = st.columns(3)
+    total_all = int(df["Total"].sum())
+    total_filtered = int(df_filtered["TotalKategori"].sum())
+    total_flight = len(df)
+    avg = int(total_all / total_flight) if total_flight > 0 else 0
 
-    total = int(df_filtered["TotalKategori"].sum())
-    jumlah_flight = len(df_filtered)
-    rata2 = int(total / jumlah_flight) if jumlah_flight > 0 else 0
+    total_transit = int(df["Transit"].sum())
+    total_kargo = int(df["Kargo"].sum())
 
-    col1.metric("Total Penumpang", total)
-    col2.metric("Jumlah Flight", jumlah_flight)
-    col3.metric("Rata-rata / Flight", rata2)
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    col1.metric("Total Penumpang", total_all)
+    col2.metric("Filtered", total_filtered)
+    col3.metric("Avg / Flight", avg)
+    col4.metric("Transit", total_transit)
+    col5.metric("Kargo", total_kargo)
 
     # ========================
-    # TABEL
+    # GRAFIK
+    # ========================
+    st.subheader("📈 Tren Penumpang Harian")
+    tren = df.groupby(df["Tanggal"].dt.date)["Total"].sum()
+    st.line_chart(tren)
+
+    st.subheader("📦 Tren Kargo Harian")
+    tren_kargo = df.groupby(df["Tanggal"].dt.date)["Kargo"].sum()
+    st.line_chart(tren_kargo)
+
+    st.subheader("🏆 Top Maskapai")
+    top = df.groupby("Maskapai")["Total"].sum().sort_values(ascending=False).head(5)
+    st.bar_chart(top)
+
+    st.subheader("🧭 Distribusi D vs A")
+    dist = df.groupby("Jenis")["Total"].sum()
+    st.bar_chart(dist)
+
+    # ========================
+    # DATA TABLE
     # ========================
     st.subheader("📋 Detail Data")
     st.dataframe(df_filtered, use_container_width=True)
 
     # ========================
-    # GRAFIK
-    # ========================
-    st.subheader("📈 Tren Harian")
-
-    rekap = df[
-        (df["Maskapai"] == maskapai) &
-        (df["Jenis"] == jenis)
-    ].groupby(df["Tanggal"].dt.date)["Total"].sum()
-
-    st.line_chart(rekap)
-
-    # ========================
     # DOWNLOAD
     # ========================
     st.download_button(
-        label="⬇️ Download Hasil",
-        data=df_filtered.to_csv(index=False),
-        file_name="hasil_seleksi.csv",
-        mime="text/csv"
+        "⬇️ Download Data",
+        df_filtered.to_csv(index=False),
+        "hasil_dashboard.csv"
     )
 
 else:

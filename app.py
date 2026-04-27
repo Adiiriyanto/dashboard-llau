@@ -9,8 +9,12 @@ st.set_page_config(layout="wide")
 # =========================
 st.markdown("""
 <style>
-.stApp { background: linear-gradient(135deg, #0f172a, #1e293b); }
-section[data-testid="stSidebar"] { background-color: #111827; }
+.stApp {
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+}
+section[data-testid="stSidebar"] {
+    background-color: #111827;
+}
 .metric-card {
     background: #1f2937;
     padding: 15px;
@@ -18,12 +22,14 @@ section[data-testid="stSidebar"] { background-color: #111827; }
     text-align: center;
     border: 1px solid #374151;
 }
-.metric-value { font-size: 26px; font-weight: bold; }
+.metric-value {
+    font-size: 28px;
+    font-weight: bold;
+}
 .green { color: #22c55e; }
 .red { color: #ef4444; }
 .blue { color: #3b82f6; }
 .orange { color: #f59e0b; }
-.purple { color: #a855f7; }
 h1, h2, h3 { color: #e5e7eb; }
 </style>
 """, unsafe_allow_html=True)
@@ -100,7 +106,7 @@ if file:
         "Tanggal": df[col_tgl],
         "Maskapai": df[col_mask],
         "Pergerakan": df[col_jns] if col_jns else "D",
-        "No Flight": df[col_flight] if col_flight else "",
+        "No Flight Raw": df[col_flight] if col_flight else "",
         "Dewasa": df[col_dew] if col_dew else 0,
         "Anak": df[col_anak] if col_anak else 0,
         "Bayi": df[col_bayi] if col_bayi else 0,
@@ -119,7 +125,22 @@ if file:
     data["Pergerakan"] = data["Pergerakan"].astype(str).str.upper().replace({"D":"Departure","A":"Arrival"})
 
     # =========================
-    # PJP2U LOGIC FINAL
+    # PARSE FLIGHT
+    # =========================
+    def extract_flight(x):
+        if pd.isna(x):
+            return "UNKNOWN"
+        x = str(x).upper().strip()
+        m = re.search(r'[A-Z]{1,3}[0-9]{2,4}', x)
+        return m.group(0) if m else "UNKNOWN"
+
+    data["No Flight"] = data["No Flight Raw"].apply(extract_flight)
+
+    for c in ["Dewasa","Anak","Bayi","Transit_Dewasa","Transit_Anak","Transit_Total","Kargo"]:
+        data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
+
+    # =========================
+    # 🔥 PERHITUNGAN FINAL PJP2U
     # =========================
     data["Dewasa_PJP2U"] = (data["Dewasa"] - data["Transit_Dewasa"]).clip(lower=0)
     data["Anak_PJP2U"] = (data["Anak"] - data["Transit_Anak"]).clip(lower=0)
@@ -132,6 +153,7 @@ if file:
     st.sidebar.header("Filter")
 
     maskapai = st.sidebar.selectbox("Maskapai", sorted(data["Maskapai"].unique()))
+    flight = st.sidebar.selectbox("No Penerbangan", ["SEMUA"] + sorted(data["No Flight"].unique()))
     pergerakan = st.sidebar.selectbox("Pergerakan", ["SEMUA","Departure","Arrival"])
 
     mode = st.sidebar.radio("Tanggal", ["1 Hari","Rentang"])
@@ -151,6 +173,9 @@ if file:
     f = data.copy()
     f = f[f["Maskapai"] == maskapai]
 
+    if flight != "SEMUA":
+        f = f[f["No Flight"] == flight]
+
     if pergerakan != "SEMUA":
         f = f[f["Pergerakan"] == pergerakan]
 
@@ -159,32 +184,14 @@ if file:
     total = int(f["PJP2U"].sum())
 
     # =========================
-    # KPI
+    # HASIL
     # =========================
-    st.subheader("📊 KPI Utama")
+    st.subheader("📌 Total PJP2U")
+    st.markdown(f"<h2 style='color:#22c55e'>{total}</h2>", unsafe_allow_html=True)
 
-    c1,c2,c3,c4 = st.columns(4)
-
-    def card(title, value):
-        st.markdown(f"""
-        <div class="metric-card">
-            <div>{title}</div>
-            <div class="metric-value">{value}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c1:
-        card("PJP2U", int(data["PJP2U"].sum()))
-    with c2:
-        card("Dewasa PJP2U", int(data["Dewasa_PJP2U"].sum()))
-    with c3:
-        card("Anak PJP2U", int(data["Anak_PJP2U"].sum()))
-    with c4:
-        card("Kargo", int(data["Kargo"].sum()))
-
-    st.subheader("📌 Total Hasil")
-    card("Total", total)
-
+    # =========================
+    # DETAIL
+    # =========================
     st.subheader("📋 Detail Data")
     st.dataframe(f, use_container_width=True)
 

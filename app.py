@@ -57,6 +57,12 @@ if uploaded_file:
     df = df.dropna(subset=["Tanggal"])
 
     # ========================
+    # NORMALISASI (FIX UTAMA FILTER)
+    # ========================
+    df["Maskapai"] = df["Maskapai"].astype(str).str.strip().str.upper()
+    df["Jenis"] = df["Jenis"].astype(str).str.strip().str.upper()
+
+    # ========================
     # NUMERIC
     # ========================
     for col in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
@@ -68,25 +74,20 @@ if uploaded_file:
 
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    if "Jenis" not in df.columns:
-        df["Jenis"] = "D"
-
     df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"] + df["Transit"]
 
     # ========================
-    # SIDEBAR FILTER
+    # SIDEBAR
     # ========================
     st.sidebar.header("⚙️ Filter")
 
-    maskapai = st.sidebar.selectbox(
-        "Maskapai",
-        sorted(df["Maskapai"].dropna().unique())
-    )
+    maskapai_list = sorted(df["Maskapai"].dropna().unique())
+    maskapai = st.sidebar.selectbox("Maskapai", maskapai_list)
 
     jenis = st.sidebar.selectbox("Jenis", ["D","A"])
 
     # ========================
-    # MODE TANGGAL (FIX FINAL)
+    # MODE TANGGAL
     # ========================
     mode_tanggal = st.sidebar.radio(
         "Mode Tanggal",
@@ -139,16 +140,16 @@ if uploaded_file:
     search_button = st.sidebar.button("🔍 Cari")
 
     # ========================
-    # FILTER DATA
+    # FILTER DATA (FIX FINAL)
     # ========================
     df_filtered = df[
-        (df["Maskapai"] == maskapai) &
-        (df["Jenis"] == jenis) &
+        (df["Maskapai"].str.contains(maskapai, case=False, na=False)) &
+        (df["Jenis"].str.contains(jenis, case=False, na=False)) &
         (df["Tanggal"] >= start_date) &
         (df["Tanggal"] <= end_date)
     ].copy()
 
-    # SEARCH APPLY
+    # APPLY SEARCH
     if search_button and search_input:
         df_filtered = df_filtered[
             df_filtered.astype(str)
@@ -199,7 +200,6 @@ if uploaded_file:
     # TABEL
     # ========================
     st.subheader("📋 Detail Data")
-
     st.dataframe(df_filtered, use_container_width=True)
 
 else:

@@ -8,7 +8,7 @@ import re
 st.set_page_config(layout="wide")
 
 # =========================
-# STYLE (BERSIH TANPA LOGO)
+# STYLE
 # =========================
 st.markdown("""
 <style>
@@ -33,9 +33,7 @@ section[data-testid="stSidebar"] {
 .red { color: #ef4444; }
 .blue { color: #3b82f6; }
 .orange { color: #f59e0b; }
-h1, h2, h3 {
-    color: #e5e7eb;
-}
+h1, h2, h3 { color: #e5e7eb; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -85,11 +83,19 @@ if file:
                 return c
         return None
 
-    # DETEKSI KOLOM
+    # =========================
+    # DETEKSI KOLOM (FIX FLIGHT)
+    # =========================
     col_tgl = find("tanggal")
     col_mask = find("operator") or find("maskapai")
     col_jns = find("pergerakan") or find("jenis")
-    col_flight = find("flight") or find("penerbangan") or find("no")
+
+    # 🔥 FIX FLIGHT (TANPA "no")
+    col_flight = None
+    for c in df.columns:
+        if any(k in c for k in ["flight", "penerbangan", "flt"]):
+            col_flight = c
+            break
 
     col_dew = find("dewasa")
     col_anak = find("anak")
@@ -108,7 +114,9 @@ if file:
         st.write(df.columns)
         st.stop()
 
+    # =========================
     # DATAFRAME
+    # =========================
     data = pd.DataFrame({
         "Tanggal": df[col_tgl],
         "Maskapai": df[col_mask],
@@ -122,7 +130,9 @@ if file:
         "Kargo": df[col_kargo] if col_kargo else 0
     })
 
+    # =========================
     # CLEAN DATA
+    # =========================
     data["Tanggal"] = pd.to_datetime(data["Tanggal"], errors="coerce", dayfirst=True)
     data = data.dropna(subset=["Tanggal"])
 
@@ -132,12 +142,21 @@ if file:
         "A": "Arrival"
     })
 
-    data["No Flight"] = data["No Flight"].astype(str).str.strip()
+    # 🔥 FIX FLIGHT VALUE
+    data["No Flight"] = data["No Flight"].astype(str).str.upper().str.strip()
+
+    # hapus karakter aneh → jadi JT941
+    data["No Flight"] = data["No Flight"].str.replace(r'[^A-Z0-9]', '', regex=True)
+
+    # kalau isinya angka/tanggal → jadi UNKNOWN
+    data.loc[data["No Flight"].str.len() < 3, "No Flight"] = "UNKNOWN"
 
     for c in ["Dewasa","Anak","Bayi","Transit_Dewasa","Transit_Total","Kargo"]:
         data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
 
+    # =========================
     # HITUNGAN
+    # =========================
     data["Dewasa_Bersih"] = (data["Dewasa"] - data["Transit_Dewasa"]).clip(lower=0)
     data["PJP2U"] = ((data["Dewasa"] + data["Anak"]) - data["Transit_Total"]).clip(lower=0)
 
@@ -169,7 +188,9 @@ if file:
         ["Semua","Dewasa","Anak","PJP2U","Bayi","Transit","Kargo"]
     )
 
+    # =========================
     # FILTER DATA
+    # =========================
     f = data.copy()
     f = f[f["Maskapai"] == maskapai]
 
@@ -181,7 +202,9 @@ if file:
 
     f = f[(f["Tanggal"] >= start) & (f["Tanggal"] <= end)]
 
+    # =========================
     # HASIL
+    # =========================
     if kategori == "Dewasa":
         f["Hasil"] = f["Dewasa_Bersih"]
     elif kategori == "Anak":
@@ -199,7 +222,9 @@ if file:
 
     total = int(f["Hasil"].sum())
 
+    # =========================
     # KPI
+    # =========================
     st.subheader("📊 KPI Utama")
     c1,c2,c3,c4 = st.columns(4)
 
@@ -226,7 +251,9 @@ if file:
     st.subheader("📈 Tren PJP2U")
     st.line_chart(data.groupby(data["Tanggal"].dt.date)["PJP2U"].sum())
 
+    # =========================
     # DETAIL
+    # =========================
     st.subheader("📋 Detail Data")
     st.dataframe(f, use_container_width=True)
 

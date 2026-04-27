@@ -2,24 +2,9 @@ import streamlit as st
 import pandas as pd
 
 # ========================
-# CONFIG + STYLE
+# CONFIG
 # ========================
 st.set_page_config(page_title="LLAU Dashboard", layout="wide")
-
-st.markdown("""
-<style>
-.card {
-    background-color: #111827;
-    padding: 20px;
-    border-radius: 12px;
-    text-align: center;
-}
-.kpi-green { color: #22c55e; font-size: 28px; font-weight: bold; }
-.kpi-red { color: #ef4444; font-size: 28px; font-weight: bold; }
-.kpi-title { font-size: 14px; color: #9ca3af; }
-.big-number { font-size: 40px; font-weight: bold; color: #3b82f6; }
-</style>
-""", unsafe_allow_html=True)
 
 st.title("✈️ Dashboard LLAU Rendani Airport")
 
@@ -35,12 +20,11 @@ if uploaded_file:
     # ========================
     df = pd.read_excel(uploaded_file, skiprows=9)
 
-    # CLEAN HEADER
     df.columns = [str(col).strip() for col in df.columns]
     df = df.loc[:, ~df.columns.duplicated()]
 
     # ========================
-    # AUTO MAPPING
+    # MAPPING
     # ========================
     col_map = {}
     for col in df.columns:
@@ -71,18 +55,13 @@ if uploaded_file:
         st.stop()
 
     # ========================
-    # FIX TANGGAL (ANTI ERROR)
+    # FIX TANGGAL
     # ========================
-    df["Tanggal"] = pd.to_datetime(
-        df["Tanggal"],
-        errors="coerce",
-        dayfirst=True
-    )
-
+    df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce", dayfirst=True)
     df = df[df["Tanggal"].notna()]
 
     # ========================
-    # NUMERIC SAFE
+    # NUMERIC
     # ========================
     for col in ["Dewasa", "Anak", "Bayi", "Transit", "Kargo"]:
         if col not in df.columns:
@@ -107,17 +86,27 @@ if uploaded_file:
     jenis = st.sidebar.selectbox("Jenis", ["D", "A"])
 
     # ========================
-    # RANGE DATE FIX (INI KUNCI)
+    # DATE RANGE FIX TOTAL
     # ========================
-    min_date = df["Tanggal"].min()
-    max_date = df["Tanggal"].max()
+    min_date = df["Tanggal"].min().date()
+    max_date = df["Tanggal"].max().date()
 
-    start_date, end_date = st.sidebar.date_input(
+    date_input = st.sidebar.date_input(
         "Rentang Tanggal",
-        value=(min_date, max_date)
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date
     )
 
-    # convert ke datetime biar aman
+    # HANDLE SEMUA KONDISI (INI KUNCI)
+    if isinstance(date_input, tuple) and len(date_input) == 2:
+        start_date, end_date = date_input
+    elif date_input:
+        start_date = end_date = date_input
+    else:
+        start_date, end_date = min_date, max_date
+
+    # convert ke datetime
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
 
@@ -127,7 +116,7 @@ if uploaded_file:
     )
 
     # ========================
-    # FILTER DATA (FIX TOTAL)
+    # FILTER DATA
     # ========================
     df_filtered = df[
         (df["Maskapai"] == maskapai) &
@@ -159,33 +148,19 @@ if uploaded_file:
     # ========================
     st.subheader("📊 KPI Utama")
 
-    k1, k2, k3, k4, k5 = st.columns(5)
+    c1, c2, c3, c4, c5 = st.columns(5)
 
-    k1.metric("Total Penumpang", int(df["Total"].sum()))
-    k2.metric("Flight", len(df))
-    k3.metric("Transit", int(df["Transit"].sum()))
-    k4.metric("Kargo", int(df["Kargo"].sum()))
-
-    warna = "kpi-green" if total_hasil > 0 else "kpi-red"
-
-    k5.markdown(f"""
-    <div class="card">
-        <div class="kpi-title">Hasil Pencarian</div>
-        <div class="{warna}">{total_hasil}</div>
-    </div>
-    """, unsafe_allow_html=True)
+    c1.metric("Total Penumpang", int(df["Total"].sum()))
+    c2.metric("Flight", len(df))
+    c3.metric("Transit", int(df["Transit"].sum()))
+    c4.metric("Kargo", int(df["Kargo"].sum()))
+    c5.metric("Hasil Pencarian", total_hasil)
 
     # ========================
     # HIGHLIGHT
     # ========================
     st.subheader("📌 Ringkasan Hasil Pencarian")
-
-    st.markdown(f"""
-    <div class="card">
-        <div class="kpi-title">Kategori: {kategori}</div>
-        <div class="big-number">{total_hasil}</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.metric(f"Total {kategori}", total_hasil)
 
     # ========================
     # GRAFIK
@@ -205,15 +180,6 @@ if uploaded_file:
     df_filtered = df_filtered[cols]
 
     st.dataframe(df_filtered, use_container_width=True)
-
-    # ========================
-    # DOWNLOAD
-    # ========================
-    st.download_button(
-        "⬇️ Download Data",
-        df_filtered.to_csv(index=False),
-        "hasil_dashboard.csv"
-    )
 
 else:
     st.info("Upload file Excel terlebih dahulu")

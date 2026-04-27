@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 import base64
+import os
 
 # =========================
 # CONFIG
@@ -9,82 +10,97 @@ import base64
 st.set_page_config(layout="wide")
 
 # =========================
-# LOAD LOGO (DARI GITHUB)
+# SAFE LOAD LOGO (ANTI ERROR)
 # =========================
-def get_base64(file):
-    with open(file, "rb") as f:
-        return base64.b64encode(f.read()).decode()
+def load_logo():
+    try:
+        if os.path.exists("logo.png"):
+            with open("logo.png", "rb") as f:
+                return base64.b64encode(f.read()).decode()
+    except:
+        return None
+    return None
 
-logo_base64 = get_base64("logo.png")
+logo_base64 = load_logo()
 
 # =========================
-# STYLE (TETAP + TAMBAH WATERMARK)
+# STYLE (SAFE WATERMARK)
 # =========================
-st.markdown(f"""
+base_css = """
 <style>
-.stApp {{
+.stApp {
     background: linear-gradient(135deg, #0f172a, #1e293b);
-}}
+}
 
-section[data-testid="stSidebar"] {{
+section[data-testid="stSidebar"] {
     background-color: #111827;
-}}
+}
 
-/* WATERMARK */
-.stApp::before {{
-    content: "";
-    background: url("data:image/png;base64,{logo_base64}") no-repeat center;
-    background-size: 400px;
-    opacity: 0.05;
-    position: fixed;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-}}
-
-.metric-card {{
+.metric-card {
     background: #1f2937;
     padding: 15px;
     border-radius: 12px;
     text-align: center;
     border: 1px solid #374151;
-}}
+}
 
-.metric-value {{
+.metric-value {
     font-size: 28px;
     font-weight: bold;
-}}
+}
 
-.green {{ color: #22c55e; }}
-.red {{ color: #ef4444; }}
-.blue {{ color: #3b82f6; }}
-.orange {{ color: #f59e0b; }}
+.green { color: #22c55e; }
+.red { color: #ef4444; }
+.blue { color: #3b82f6; }
+.orange { color: #f59e0b; }
 
-h1, h2, h3 {{
+h1, h2, h3 {
     color: #e5e7eb;
-}}
+}
 </style>
-""", unsafe_allow_html=True)
+"""
+
+st.markdown(base_css, unsafe_allow_html=True)
+
+# WATERMARK (hanya kalau logo ada)
+if logo_base64:
+    st.markdown(f"""
+    <style>
+    .stApp::before {{
+        content: "";
+        background: url("data:image/png;base64,{logo_base64}") no-repeat center;
+        background-size: 400px;
+        opacity: 0.05;
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
 
 # =========================
-# HEADER (DITAMBAH LOGO)
+# HEADER (SAFE LOGO)
 # =========================
-col_logo, col_title, col_btn = st.columns([1,7,2])
+col1, col2, col3 = st.columns([1,7,2])
 
-with col_logo:
-    st.image("logo.png", width=70)
+with col1:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=70)
 
-with col_title:
+with col2:
     st.title("✈️ Dashboard LLAU Rendani Airport")
 
-with col_btn:
+with col3:
     if st.button("🔄 Reset"):
         st.rerun()
 
 # =========================
-# SIDEBAR (DITAMBAH LOGO)
+# SIDEBAR (SAFE LOGO)
 # =========================
-st.sidebar.image("logo.png", width=140)
+if os.path.exists("logo.png"):
+    st.sidebar.image("logo.png", width=140)
+
 st.sidebar.markdown("### LLAU Rendani Airport")
 st.sidebar.markdown("---")
 
@@ -116,6 +132,7 @@ if file:
                 return c
         return None
 
+    # DETEKSI KOLOM
     col_tgl = find("tanggal")
     col_mask = find("operator") or find("maskapai")
     col_jns = find("pergerakan") or find("jenis")
@@ -137,6 +154,7 @@ if file:
         st.write(df.columns)
         st.stop()
 
+    # CLEAN DATA
     data = pd.DataFrame({
         "Tanggal": df[col_tgl],
         "Maskapai": df[col_mask],
@@ -161,9 +179,11 @@ if file:
     for c in ["Dewasa","Anak","Bayi","Transit_Dewasa","Transit_Total","Kargo"]:
         data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
 
+    # PERHITUNGAN
     data["Dewasa_Bersih"] = (data["Dewasa"] - data["Transit_Dewasa"]).clip(lower=0)
     data["PJP2U"] = ((data["Dewasa"] + data["Anak"]) - data["Transit_Total"]).clip(lower=0)
 
+    # FILTER
     st.sidebar.header("Filter")
 
     maskapai = st.sidebar.selectbox("Maskapai", sorted(data["Maskapai"].unique()))
@@ -188,6 +208,7 @@ if file:
         ["Semua","Dewasa","Anak","PJP2U","Bayi","Transit","Kargo"]
     )
 
+    # FILTER DATA
     f = data.copy()
     f = f[f["Maskapai"] == maskapai]
 
@@ -196,6 +217,7 @@ if file:
 
     f = f[(f["Tanggal"] >= start) & (f["Tanggal"] <= end)]
 
+    # HASIL
     if kategori == "Dewasa":
         f["Hasil"] = f["Dewasa_Bersih"]
     elif kategori == "Anak":
@@ -213,8 +235,8 @@ if file:
 
     total = int(f["Hasil"].sum())
 
+    # KPI
     st.subheader("📊 KPI Utama")
-
     c1,c2,c3,c4 = st.columns(4)
 
     def card(title, value, color):

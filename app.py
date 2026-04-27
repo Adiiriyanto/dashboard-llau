@@ -32,7 +32,7 @@ h1, h2, h3 { color: #e5e7eb; }
 # =========================
 col1, col2 = st.columns([8,2])
 with col1:
-    st.title("✈️ Dashboard Operasional LLAU Rendani Airport")
+    st.title("✈️ Dashboard Rekonsiliasi Data LLAU Rendani Airport")
 with col2:
     if st.button("🔄 Reset"):
         st.rerun()

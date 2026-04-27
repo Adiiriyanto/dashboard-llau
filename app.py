@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import re
-import base64
-import os
 
 # =========================
 # CONFIG
@@ -10,21 +8,7 @@ import os
 st.set_page_config(layout="wide")
 
 # =========================
-# LOAD LOGO
-# =========================
-def load_logo():
-    try:
-        if os.path.exists("logo.png"):
-            with open("logo.png", "rb") as f:
-                return base64.b64encode(f.read()).decode()
-    except:
-        return None
-    return None
-
-logo_base64 = load_logo()
-
-# =========================
-# STYLE
+# STYLE (BERSIH TANPA LOGO)
 # =========================
 st.markdown("""
 <style>
@@ -49,46 +33,28 @@ section[data-testid="stSidebar"] {
 .red { color: #ef4444; }
 .blue { color: #3b82f6; }
 .orange { color: #f59e0b; }
-h1, h2, h3 { color: #e5e7eb; }
+h1, h2, h3 {
+    color: #e5e7eb;
+}
 </style>
 """, unsafe_allow_html=True)
-
-# WATERMARK
-if logo_base64:
-    st.markdown(f"""
-    <style>
-    .stApp::before {{
-        content: "";
-        background: url("data:image/png;base64,{logo_base64}") no-repeat center;
-        background-size: 400px;
-        opacity: 0.05;
-        position: fixed;
-        width: 100%;
-        height: 100%;
-    }}
-    </style>
-    """, unsafe_allow_html=True)
 
 # =========================
 # HEADER
 # =========================
-col1, col2, col3 = st.columns([1,7,2])
+col1, col2 = st.columns([8,2])
 
 with col1:
-    st.image("logo.png", width=70)
-
-with col2:
     st.title("✈️ Dashboard LLAU Rendani Airport")
 
-with col3:
+with col2:
     if st.button("🔄 Reset"):
         st.rerun()
 
 # =========================
 # SIDEBAR
 # =========================
-st.sidebar.image("logo.png", width=140)
-st.sidebar.markdown("### LLAU Rendani Airport")
+st.sidebar.markdown("### ✈️ LLAU Rendani Airport")
 st.sidebar.markdown("---")
 
 # =========================
@@ -156,12 +122,15 @@ if file:
         "Kargo": df[col_kargo] if col_kargo else 0
     })
 
-    # CLEAN
+    # CLEAN DATA
     data["Tanggal"] = pd.to_datetime(data["Tanggal"], errors="coerce", dayfirst=True)
     data = data.dropna(subset=["Tanggal"])
 
     data["Pergerakan"] = data["Pergerakan"].astype(str).str.upper().str.strip()
-    data["Pergerakan"] = data["Pergerakan"].replace({"D": "Departure","A": "Arrival"})
+    data["Pergerakan"] = data["Pergerakan"].replace({
+        "D": "Departure",
+        "A": "Arrival"
+    })
 
     data["No Flight"] = data["No Flight"].astype(str).str.strip()
 
@@ -257,15 +226,15 @@ if file:
     st.subheader("📈 Tren PJP2U")
     st.line_chart(data.groupby(data["Tanggal"].dt.date)["PJP2U"].sum())
 
-    # =========================
-    # DETAIL (SUDAH ADA FLIGHT)
-    # =========================
+    # DETAIL
     st.subheader("📋 Detail Data")
     st.dataframe(f, use_container_width=True)
 
     st.markdown("""
     <hr>
-    <p style='text-align: center; color: gray;'>Copyright © 2026 Data UPBU Rendani Airport</p>
+    <p style='text-align: center; color: gray;'>
+    Copyright © 2026 Data UPBU Rendani Airport
+    </p>
     """, unsafe_allow_html=True)
 
 else:

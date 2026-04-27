@@ -8,19 +8,16 @@ import re
 st.set_page_config(layout="wide")
 
 # =========================
-# CUSTOM STYLE (PRO LEVEL)
+# STYLE
 # =========================
 st.markdown("""
 <style>
 .stApp {
     background: linear-gradient(135deg, #0f172a, #1e293b);
 }
-
 section[data-testid="stSidebar"] {
     background-color: #111827;
 }
-
-/* KPI Card */
 .metric-card {
     background: #1f2937;
     padding: 15px;
@@ -28,20 +25,14 @@ section[data-testid="stSidebar"] {
     text-align: center;
     border: 1px solid #374151;
 }
-
-/* KPI Number */
 .metric-value {
     font-size: 28px;
     font-weight: bold;
 }
-
-/* Colors */
 .green { color: #22c55e; }
 .red { color: #ef4444; }
 .blue { color: #3b82f6; }
 .orange { color: #f59e0b; }
-
-/* Title */
 h1, h2, h3 {
     color: #e5e7eb;
 }
@@ -54,7 +45,7 @@ h1, h2, h3 {
 col1, col2 = st.columns([8,2])
 
 with col1:
-    st.title("✈️ Evaluasi Data LLAU Rendani Airport")
+    st.title("✈️ Dashboard Operasional LLAU Rendani Airport")
 
 with col2:
     if st.button("🔄 Reset"):
@@ -106,6 +97,9 @@ if file:
         st.write(df.columns)
         st.stop()
 
+    # =========================
+    # CLEAN DATA
+    # =========================
     data = pd.DataFrame({
         "Tanggal": df[col_tgl],
         "Maskapai": df[col_mask],
@@ -117,9 +111,6 @@ if file:
         "Kargo": df[col_kargo] if col_kargo else 0
     })
 
-    # =========================
-    # CLEAN DATA
-    # =========================
     data["Tanggal"] = pd.to_datetime(data["Tanggal"], errors="coerce", dayfirst=True)
     data = data.dropna(subset=["Tanggal"])
 
@@ -129,7 +120,12 @@ if file:
     for c in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
         data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
 
-    data["Total"] = data["Dewasa"] + data["Anak"] + data["Bayi"] + data["Transit"]
+    # =========================
+    # PERHITUNGAN BARU (FIX)
+    # =========================
+    # Transit diasumsikan sudah total (dewasa+anak+bayi)
+    data["Total_Penumpang"] = (data["Dewasa"] + data["Anak"]) - data["Transit"]
+    data["Total_Penumpang"] = data["Total_Penumpang"].clip(lower=0)
 
     # =========================
     # SIDEBAR
@@ -175,7 +171,7 @@ if file:
     if kategori == "Dewasa":
         f["Hasil"] = f["Dewasa"]
     elif kategori == "Dewasa + Anak":
-        f["Hasil"] = f["Dewasa"] + f["Anak"]
+        f["Hasil"] = f["Total_Penumpang"]   # pakai rumus baru
     elif kategori == "Bayi":
         f["Hasil"] = f["Bayi"]
     elif kategori == "Transit":
@@ -183,12 +179,12 @@ if file:
     elif kategori == "Kargo":
         f["Hasil"] = f["Kargo"]
     else:
-        f["Hasil"] = f["Total"]
+        f["Hasil"] = f["Total_Penumpang"]
 
     total = int(f["Hasil"].sum())
 
     # =========================
-    # KPI CARDS
+    # KPI
     # =========================
     st.subheader("📊 KPI Utama")
 
@@ -203,7 +199,7 @@ if file:
         """, unsafe_allow_html=True)
 
     with c1:
-        card("Total Penumpang", int(data["Total"].sum()), "blue")
+        card("Total Penumpang", int(data["Total_Penumpang"].sum()), "blue")
     with c2:
         card("Flight", len(data), "orange")
     with c3:
@@ -221,7 +217,7 @@ if file:
     # GRAFIK
     # =========================
     st.subheader("📈 Tren Penumpang")
-    st.line_chart(data.groupby(data["Tanggal"].dt.date)["Total"].sum())
+    st.line_chart(data.groupby(data["Tanggal"].dt.date)["Total_Penumpang"].sum())
 
     # =========================
     # TABEL

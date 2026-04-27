@@ -1,45 +1,81 @@
 import streamlit as st
 import pandas as pd
+import re
 
 st.set_page_config(layout="wide")
 st.title("✈️ Dashboard LLAU Rendani Airport")
 
-file = st.file_uploader("Upload File Excel LLAU", type=["xlsx"])
+file = st.file_uploader("Upload File Excel (Format Standar)", type=["xlsx"])
 
 if file:
 
     # =========================
-    # LOAD FIX (HEADER 2 BARIS)
+    # LOAD DATA FLEKSIBEL
     # =========================
-    df = pd.read_excel(file, header=[0,1])
+    try:
+        df = pd.read_excel(file, header=[0,1])
+        multi = True
+    except:
+        df = pd.read_excel(file)
+        multi = False
 
     # =========================
-    # FLATTEN HEADER
+    # NORMALISASI HEADER
     # =========================
-    df.columns = [
-        f"{str(a).strip()}_{str(b).strip()}"
-        for a, b in df.columns
-    ]
+    def clean_text(x):
+        x = str(x)
+        x = re.sub(r'\s+', ' ', x)
+        return x.strip().lower()
+
+    if multi:
+        df.columns = [
+            clean_text(a) + "_" + clean_text(b)
+            for a,b in df.columns
+        ]
+    else:
+        df.columns = [clean_text(c) for c in df.columns]
 
     # =========================
-    # AMBIL KOLOM SESUAI POSISI ASLI LLAU
+    # CARI KOLOM OTOMATIS
+    # =========================
+    def find(keyword):
+        for col in df.columns:
+            if keyword in col:
+                return col
+        return None
+
+    col_tanggal = find("tanggal")
+    col_maskapai = find("operator") or find("maskapai")
+    col_jenis = find("pergerakan") or find("jenis")
+
+    col_dewasa = find("dewasa")
+    col_anak = find("anak")
+    col_bayi = find("bayi")
+    col_transit = find("transit")
+    col_kargo = find("kargo")
+
+    # =========================
+    # VALIDASI
+    # =========================
+    if not col_tanggal or not col_maskapai:
+        st.error("Format Excel tidak sesuai")
+        st.write("Kolom terbaca:", df.columns)
+        st.stop()
+
+    # =========================
+    # BENTUK DATA BERSIH
     # =========================
     clean = pd.DataFrame()
 
-    clean["Tanggal"] = df["TANGGAL PENERBANGAN\n(DD-MM-YYYY)\n** Wajib Diisi_nan"]
-    clean["Maskapai"] = df["OPERATOR PENERBANGAN\n** Wajib Diisi_Nama Operator"]
-    clean["Jenis"] = df["Pergerakan Penerbangan_(A / D)"]
+    clean["Tanggal"] = df[col_tanggal]
+    clean["Maskapai"] = df[col_maskapai]
+    clean["Jenis"] = df[col_jenis] if col_jenis else "D"
 
-    # Penumpang
-    clean["Dewasa"] = df["Data Penumpang\n** Wajib Diisi_Dewasa"]
-    clean["Anak"] = df["Data Penumpang\n** Wajib Diisi_Anak"]
-    clean["Bayi"] = df["Data Penumpang\n** Wajib Diisi_Bayi"]
-
-    # Transit
-    clean["Transit"] = df["Data Penumpang Transit\n** Wajib Diisi Apabila..._Dewasa"]
-
-    # Kargo
-    clean["Kargo"] = df["Kargo (Kg)\n**Wajib Diisi_nan"]
+    clean["Dewasa"] = df[col_dewasa] if col_dewasa else 0
+    clean["Anak"] = df[col_anak] if col_anak else 0
+    clean["Bayi"] = df[col_bayi] if col_bayi else 0
+    clean["Transit"] = df[col_transit] if col_transit else 0
+    clean["Kargo"] = df[col_kargo] if col_kargo else 0
 
     df = clean.copy()
 
@@ -139,7 +175,7 @@ if file:
     c4.metric("Kargo", int(df["Kargo"].sum()))
 
     # =========================
-    # HASIL
+    # HASIL PENCARIAN
     # =========================
     st.subheader("📌 Hasil Pencarian")
     st.metric("Total Hasil", total)
@@ -160,4 +196,4 @@ if file:
     st.dataframe(f, use_container_width=True)
 
 else:
-    st.info("Upload file Excel terlebih dahulu")
+    st.info("Upload file terlebih dahulu")

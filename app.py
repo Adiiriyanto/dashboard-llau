@@ -2,15 +2,32 @@ import streamlit as st
 import pandas as pd
 import re
 
+# =========================
+# CONFIG
+# =========================
 st.set_page_config(layout="wide")
-st.title("✈️ Dashboard LLAU Rendani Airport")
 
+# =========================
+# HEADER + RESET BUTTON
+# =========================
+col1, col2 = st.columns([8,2])
+
+with col1:
+    st.title("✈️ Dashboard LLAU Rendani Airport")
+
+with col2:
+    if st.button("🔄 Upload Data Baru"):
+        st.rerun()
+
+# =========================
+# UPLOAD FILE
+# =========================
 file = st.file_uploader("Upload File Excel (Format Standar)", type=["xlsx"])
 
 if file:
 
     # =========================
-    # LOAD DATA FLEKSIBEL
+    # LOAD DATA (AUTO FLEXIBLE)
     # =========================
     try:
         df = pd.read_excel(file, header=[0,1])
@@ -94,7 +111,7 @@ if file:
     df["Total"] = df["Dewasa"] + df["Anak"] + df["Bayi"] + df["Transit"]
 
     # =========================
-    # FILTER
+    # SIDEBAR FILTER
     # =========================
     st.sidebar.header("Filter")
 
@@ -119,7 +136,7 @@ if file:
             start = pd.to_datetime(min_d)
             end = pd.to_datetime(max_d)
 
-    keyword = st.sidebar.text_input("Search")
+    keyword = st.sidebar.text_input("🔍 Search")
     btn = st.sidebar.button("Cari")
 
     kategori = st.sidebar.selectbox(
@@ -146,7 +163,7 @@ if file:
         ]
 
     # =========================
-    # HASIL
+    # HITUNG HASIL
     # =========================
     if kategori == "Dewasa":
         f["Hasil"] = f["Dewasa"]
@@ -167,8 +184,8 @@ if file:
     # KPI
     # =========================
     st.subheader("📊 KPI Utama")
-    c1,c2,c3,c4 = st.columns(4)
 
+    c1,c2,c3,c4 = st.columns(4)
     c1.metric("Total Penumpang", int(df["Total"].sum()))
     c2.metric("Flight", len(df))
     c3.metric("Transit", int(df["Transit"].sum()))
@@ -196,4 +213,4 @@ if file:
     st.dataframe(f, use_container_width=True)
 
 else:
-    st.info("Upload file terlebih dahulu")
+    st.info("Silakan upload file Excel terlebih dahulu")

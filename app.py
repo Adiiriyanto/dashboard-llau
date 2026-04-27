@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
+import base64
 
 # =========================
 # CONFIG
@@ -8,48 +9,84 @@ import re
 st.set_page_config(layout="wide")
 
 # =========================
-# STYLE
+# LOAD LOGO (DARI GITHUB)
 # =========================
-st.markdown("""
-<style>
-.stApp { background: linear-gradient(135deg, #0f172a, #1e293b); }
-section[data-testid="stSidebar"] { background-color: #111827; }
+def get_base64(file):
+    with open(file, "rb") as f:
+        return base64.b64encode(f.read()).decode()
 
-.metric-card {
+logo_base64 = get_base64("logo.png")
+
+# =========================
+# STYLE (TETAP + TAMBAH WATERMARK)
+# =========================
+st.markdown(f"""
+<style>
+.stApp {{
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+}}
+
+section[data-testid="stSidebar"] {{
+    background-color: #111827;
+}}
+
+/* WATERMARK */
+.stApp::before {{
+    content: "";
+    background: url("data:image/png;base64,{logo_base64}") no-repeat center;
+    background-size: 400px;
+    opacity: 0.05;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}}
+
+.metric-card {{
     background: #1f2937;
     padding: 15px;
     border-radius: 12px;
     text-align: center;
     border: 1px solid #374151;
-}
+}}
 
-.metric-value {
+.metric-value {{
     font-size: 28px;
     font-weight: bold;
-}
+}}
 
-.green { color: #22c55e; }
-.red { color: #ef4444; }
-.blue { color: #3b82f6; }
-.orange { color: #f59e0b; }
+.green {{ color: #22c55e; }}
+.red {{ color: #ef4444; }}
+.blue {{ color: #3b82f6; }}
+.orange {{ color: #f59e0b; }}
 
-h1, h2, h3 {
+h1, h2, h3 {{
     color: #e5e7eb;
-}
+}}
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# HEADER
+# HEADER (DITAMBAH LOGO)
 # =========================
-col1, col2 = st.columns([8,2])
+col_logo, col_title, col_btn = st.columns([1,7,2])
 
-with col1:
-    st.title("✈️ Dashboard Rekonsiliasi Data LLAU Rendani Airport")
+with col_logo:
+    st.image("logo.png", width=70)
 
-with col2:
+with col_title:
+    st.title("✈️ Dashboard LLAU Rendani Airport")
+
+with col_btn:
     if st.button("🔄 Reset"):
         st.rerun()
+
+# =========================
+# SIDEBAR (DITAMBAH LOGO)
+# =========================
+st.sidebar.image("logo.png", width=140)
+st.sidebar.markdown("### LLAU Rendani Airport")
+st.sidebar.markdown("---")
 
 # =========================
 # UPLOAD
@@ -79,9 +116,6 @@ if file:
                 return c
         return None
 
-    # =========================
-    # DETEKSI KOLOM
-    # =========================
     col_tgl = find("tanggal")
     col_mask = find("operator") or find("maskapai")
     col_jns = find("pergerakan") or find("jenis")
@@ -103,13 +137,10 @@ if file:
         st.write(df.columns)
         st.stop()
 
-    # =========================
-    # CLEAN DATA
-    # =========================
     data = pd.DataFrame({
         "Tanggal": df[col_tgl],
         "Maskapai": df[col_mask],
-        "Pergerakan": df[col_jns] if col_jns else "D",  # 🔥 UBAH NAMA
+        "Pergerakan": df[col_jns] if col_jns else "D",
         "Dewasa": df[col_dew] if col_dew else 0,
         "Anak": df[col_anak] if col_anak else 0,
         "Bayi": df[col_bayi] if col_bayi else 0,
@@ -121,7 +152,6 @@ if file:
     data["Tanggal"] = pd.to_datetime(data["Tanggal"], errors="coerce", dayfirst=True)
     data = data.dropna(subset=["Tanggal"])
 
-    # 🔥 KONVERSI D/A → Departure/Arrival
     data["Pergerakan"] = data["Pergerakan"].astype(str).str.upper().str.strip()
     data["Pergerakan"] = data["Pergerakan"].replace({
         "D": "Departure",
@@ -131,19 +161,13 @@ if file:
     for c in ["Dewasa","Anak","Bayi","Transit_Dewasa","Transit_Total","Kargo"]:
         data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
 
-    # =========================
-    # PERHITUNGAN FINAL
-    # =========================
     data["Dewasa_Bersih"] = (data["Dewasa"] - data["Transit_Dewasa"]).clip(lower=0)
     data["PJP2U"] = ((data["Dewasa"] + data["Anak"]) - data["Transit_Total"]).clip(lower=0)
 
-    # =========================
-    # SIDEBAR
-    # =========================
     st.sidebar.header("Filter")
 
     maskapai = st.sidebar.selectbox("Maskapai", sorted(data["Maskapai"].unique()))
-    pergerakan = st.sidebar.selectbox("Pergerakan", ["SEMUA","Departure","Arrival"])  # 🔥 UBAH
+    pergerakan = st.sidebar.selectbox("Pergerakan", ["SEMUA","Departure","Arrival"])
 
     mode = st.sidebar.radio("Tanggal", ["1 Hari","Rentang"])
 
@@ -164,20 +188,14 @@ if file:
         ["Semua","Dewasa","Anak","PJP2U","Bayi","Transit","Kargo"]
     )
 
-    # =========================
-    # FILTER DATA
-    # =========================
     f = data.copy()
     f = f[f["Maskapai"] == maskapai]
 
     if pergerakan != "SEMUA":
-        f = f[f["Pergerakan"] == pergerakan]  # 🔥 UBAH
+        f = f[f["Pergerakan"] == pergerakan]
 
     f = f[(f["Tanggal"] >= start) & (f["Tanggal"] <= end)]
 
-    # =========================
-    # HASIL
-    # =========================
     if kategori == "Dewasa":
         f["Hasil"] = f["Dewasa_Bersih"]
     elif kategori == "Anak":
@@ -195,9 +213,6 @@ if file:
 
     total = int(f["Hasil"].sum())
 
-    # =========================
-    # KPI
-    # =========================
     st.subheader("📊 KPI Utama")
 
     c1,c2,c3,c4 = st.columns(4)
@@ -219,27 +234,15 @@ if file:
     with c4:
         card("Kargo", int(data["Kargo"].sum()), "red")
 
-    # =========================
-    # HASIL
-    # =========================
     st.subheader("📌 Hasil Pencarian")
     card("Total Hasil", total, "green" if total > 0 else "red")
 
-    # =========================
-    # GRAFIK
-    # =========================
     st.subheader("📈 Tren PJP2U")
     st.line_chart(data.groupby(data["Tanggal"].dt.date)["PJP2U"].sum())
 
-    # =========================
-    # TABEL
-    # =========================
     st.subheader("📋 Detail Data")
     st.dataframe(f, use_container_width=True)
 
-    # =========================
-    # FOOTER RESMI
-    # =========================
     st.markdown("""
     <hr style="margin-top:50px;">
     <p style='text-align: center; color: #9ca3af; font-size: 13px;'>

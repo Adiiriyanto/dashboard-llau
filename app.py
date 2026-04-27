@@ -5,51 +5,52 @@ import re
 # =========================
 # CONFIG
 # =========================
-st.set_page_config(layout="wide")
+st.set_page_config(page_title="Dashboard LLAU Rendani", layout="wide")
 
 # =========================
-# STYLE
+# STYLE (PRO)
 # =========================
 st.markdown("""
 <style>
-.stApp {
-    background: linear-gradient(135deg, #0f172a, #1e293b);
-}
-section[data-testid="stSidebar"] {
-    background-color: #111827;
-}
+.stApp { background: linear-gradient(135deg, #0b132b, #1c2541); }
+section[data-testid="stSidebar"] { background-color: #111827; }
+.header { display: flex; align-items: center; gap: 15px; }
 .metric-card {
-    background: #1f2937;
-    padding: 15px;
-    border-radius: 12px;
-    text-align: center;
-    border: 1px solid #374151;
+    background: #1f2937; padding: 18px; border-radius: 12px;
+    text-align: center; border: 1px solid #374151;
 }
-.metric-value {
-    font-size: 28px;
-    font-weight: bold;
-}
+.metric-value { font-size: 30px; font-weight: bold; }
+.blue { color: #3b82f6; }
 .green { color: #22c55e; }
 .red { color: #ef4444; }
-.blue { color: #3b82f6; }
 .orange { color: #f59e0b; }
-h1, h2, h3 {
-    color: #e5e7eb;
-}
+h1, h2, h3 { color: #e5e7eb; }
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# HEADER
+# HEADER + RESET
 # =========================
 col1, col2 = st.columns([8,2])
-
 with col1:
-    st.title("✈️ Dashboard Rekonsiliasi Data LLAU Rendani Airport")
-
+    st.markdown("""
+    <div class="header">
+        <img src="logo.png" width="60">
+        <div>
+            <h2>Dashboard Operasional</h2>
+            <h3>LLAU Rendani Airport</h3>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 with col2:
     if st.button("🔄 Reset"):
         st.rerun()
+
+# =========================
+# SIDEBAR
+# =========================
+st.sidebar.image("logo.png", width=120)
+st.sidebar.markdown("### LLAU Rendani")
 
 # =========================
 # UPLOAD
@@ -59,7 +60,7 @@ file = st.file_uploader("Upload Data Excel", type=["xlsx"])
 if file:
 
     # =========================
-    # LOAD DATA
+    # LOAD (support multi-header)
     # =========================
     try:
         df = pd.read_excel(file, header=[0,1])
@@ -82,23 +83,40 @@ if file:
                 return c
         return None
 
-    col_tgl = find("tanggal")
-    col_mask = find("operator") or find("maskapai")
-    col_jns = find("pergerakan") or find("jenis")
+    # Kolom utama
+    col_tgl   = find("tanggal")
+    col_mask  = find("operator") or find("maskapai")
+    col_jns   = find("jenis") or find("pergerakan")
 
-    col_dew = find("dewasa")
-    col_anak = find("anak")
-    col_bayi = find("bayi")
-    col_transit = find("transit")
+    col_dew   = find("dewasa")
+    col_anak  = find("anak")
+    col_bayi  = find("bayi")
+
+    # Transit (coba deteksi per kategori dulu)
+    col_t_dew  = None
+    col_t_anak = None
+    col_t_bayi = None
+    for c in df.columns:
+        if "transit" in c and "dewasa" in c:
+            col_t_dew = c
+        if "transit" in c and "anak" in c:
+            col_t_anak = c
+        if "transit" in c and "bayi" in c:
+            col_t_bayi = c
+
+    # Fallback: transit total (jika tidak ada rinciannya)
+    col_t_total = find("transit")
+
     col_kargo = find("kargo")
 
+    # Validasi minimal
     if not col_tgl or not col_mask:
-        st.error("Format tidak dikenali")
+        st.error("Format kolom tidak dikenali")
         st.write(df.columns)
         st.stop()
 
     # =========================
-    # CLEAN DATA
+    # BENTUK DATA BERSIH
     # =========================
     data = pd.DataFrame({
         "Tanggal": df[col_tgl],
@@ -107,28 +125,43 @@ if file:
         "Dewasa": df[col_dew] if col_dew else 0,
         "Anak": df[col_anak] if col_anak else 0,
         "Bayi": df[col_bayi] if col_bayi else 0,
-        "Transit": df[col_transit] if col_transit else 0,
+        "Transit_Dewasa": df[col_t_dew] if col_t_dew else 0,
+        "Transit_Anak": df[col_t_anak] if col_t_anak else 0,
+        "Transit_Bayi": df[col_t_bayi] if col_t_bayi else 0,
+        "Transit_Total_Fallback": df[col_t_total] if col_t_total else 0,
         "Kargo": df[col_kargo] if col_kargo else 0
     })
 
+    # =========================
+    # CLEAN TIPE DATA
+    # =========================
     data["Tanggal"] = pd.to_datetime(data["Tanggal"], errors="coerce", dayfirst=True)
     data = data.dropna(subset=["Tanggal"])
 
     data["Maskapai"] = data["Maskapai"].astype(str).str.upper().str.strip()
     data["Jenis"] = data["Jenis"].astype(str).str.upper().str.strip()
 
-    for c in ["Dewasa","Anak","Bayi","Transit","Kargo"]:
+    for c in ["Dewasa","Anak","Bayi","Transit_Dewasa","Transit_Anak","Transit_Bayi","Transit_Total_Fallback","Kargo"]:
         data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
 
     # =========================
-    # PERHITUNGAN BARU (FIX)
+    # PERHITUNGAN FINAL (FIX)
     # =========================
-    # Transit diasumsikan sudah total (dewasa+anak+bayi)
-    data["Total_Penumpang"] = (data["Dewasa"] + data["Anak"]) - data["Transit"]
-    data["Total_Penumpang"] = data["Total_Penumpang"].clip(lower=0)
+    # Tentukan transit total yang dipakai
+    if data[["Transit_Dewasa","Transit_Anak","Transit_Bayi"]].sum().sum() > 0:
+        data["Transit_Total"] = data["Transit_Dewasa"] + data["Transit_Anak"] + data["Transit_Bayi"]
+    else:
+        data["Transit_Total"] = data["Transit_Total_Fallback"]
+
+    # 🔴 PERBAIKAN ANDA:
+    # Dewasa bersih = Dewasa - Transit Dewasa
+    data["Dewasa_Bersih"] = (data["Dewasa"] - data["Transit_Dewasa"]).clip(lower=0)
+
+    # Dewasa + Anak bersih = (Dewasa + Anak) - Transit Total
+    data["Total_Penumpang"] = ((data["Dewasa"] + data["Anak"]) - data["Transit_Total"]).clip(lower=0)
 
     # =========================
-    # SIDEBAR
+    # FILTER SIDEBAR
     # =========================
     st.sidebar.header("Filter")
 
@@ -155,7 +188,7 @@ if file:
     )
 
     # =========================
-    # FILTER
+    # FILTER DATA
     # =========================
     f = data.copy()
     f = f[f["Maskapai"] == maskapai]
@@ -166,16 +199,16 @@ if file:
     f = f[(f["Tanggal"] >= start) & (f["Tanggal"] <= end)]
 
     # =========================
-    # HASIL
+    # HASIL (SESUAI KATEGORI)
     # =========================
     if kategori == "Dewasa":
-        f["Hasil"] = f["Dewasa"]
+        f["Hasil"] = f["Dewasa_Bersih"]               # 🔴 pakai rumus baru
     elif kategori == "Dewasa + Anak":
-        f["Hasil"] = f["Total_Penumpang"]   # pakai rumus baru
+        f["Hasil"] = f["Total_Penumpang"]             # 🔴 pakai rumus baru
     elif kategori == "Bayi":
         f["Hasil"] = f["Bayi"]
     elif kategori == "Transit":
-        f["Hasil"] = f["Transit"]
+        f["Hasil"] = f["Transit_Total"]
     elif kategori == "Kargo":
         f["Hasil"] = f["Kargo"]
     else:
@@ -203,12 +236,12 @@ if file:
     with c2:
         card("Flight", len(data), "orange")
     with c3:
-        card("Transit", int(data["Transit"].sum()), "green")
+        card("Transit", int(data["Transit_Total"].sum()), "green")
     with c4:
         card("Kargo", int(data["Kargo"].sum()), "red")
 
     # =========================
-    # HASIL
+    # HASIL PENCARIAN
     # =========================
     st.subheader("📌 Hasil Pencarian")
     card("Total Hasil", total, "green" if total > 0 else "red")

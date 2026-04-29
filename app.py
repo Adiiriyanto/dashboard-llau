@@ -119,10 +119,12 @@ if file:
         data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
 
     # =========================
-    # 🔥 LOGIC FINAL (INI SAJA YANG DIUBAH)
+    # 🔥 LOGIC FINAL (PERBAIKAN ANAK SAJA)
     # =========================
     data["Dewasa_PJP2U"] = (data["Dewasa"] - data["Transit_Dewasa"]).clip(lower=0)
-    data["Anak_PJP2U"] = (data["Anak"] - data["Transit_Anak"]).clip(lower=0)
+
+    # 🔥 FIX DI SINI (ANAK)
+    data["Anak_PJP2U"] = (data["Anak"] - data["Transit_Anak"]).abs()
 
     data["PJP2U"] = data["Dewasa_PJP2U"] + data["Anak_PJP2U"]
 
@@ -166,7 +168,7 @@ if file:
     f = f[(f["Tanggal"] >= start) & (f["Tanggal"] <= end)]
 
     # =========================
-    # HASIL (DISESUAIKAN)
+    # HASIL (TETAP)
     # =========================
     if kategori == "Dewasa":
         f["Hasil"] = f["Dewasa_PJP2U"]

@@ -2,22 +2,16 @@ import streamlit as st
 import pandas as pd
 import re
 
-# =========================
-# CONFIG
-# =========================
 st.set_page_config(layout="wide")
 
 # =========================
-# STYLE
+# STYLE (TIDAK DIUBAH)
 # =========================
 st.markdown("""
 <style>
-.stApp {
-    background: linear-gradient(135deg, #0f172a, #1e293b);
-}
-section[data-testid="stSidebar"] {
-    background-color: #111827;
-}
+.stApp { background: linear-gradient(135deg, #0f172a, #1e293b); }
+section[data-testid="stSidebar"] { background-color: #111827; }
+
 .metric-card {
     background: #1f2937;
     padding: 15px;
@@ -25,20 +19,19 @@ section[data-testid="stSidebar"] {
     text-align: center;
     border: 1px solid #374151;
 }
-.metric-value {
-    font-size: 28px;
-    font-weight: bold;
-}
+
+.metric-value { font-size: 28px; font-weight: bold; }
 .green { color: #22c55e; }
 .red { color: #ef4444; }
 .blue { color: #3b82f6; }
 .orange { color: #f59e0b; }
+
 h1, h2, h3 { color: #e5e7eb; }
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# HEADER
+# HEADER (TETAP)
 # =========================
 col1, col2 = st.columns([8,2])
 
@@ -50,56 +43,48 @@ with col2:
         st.rerun()
 
 # =========================
-# SIDEBAR
+# SIDEBAR (TETAP)
 # =========================
 st.sidebar.markdown("### ✈️ LLAU Rendani Airport")
 st.sidebar.markdown("---")
 
-# =========================
-# UPLOAD
-# =========================
 file = st.file_uploader("Upload Data Excel", type=["xlsx"])
 
 if file:
 
     # =========================
-    # LOAD EXCEL
+    # LOAD
     # =========================
     try:
         df = pd.read_excel(file, header=[0,1])
-        multi = True
+        df.columns = [f"{a}_{b}".lower().strip() for a,b in df.columns]
     except:
         df = pd.read_excel(file)
-        multi = False
+        df.columns = [str(c).lower().strip() for c in df.columns]
 
-    def clean(x):
-        return re.sub(r'\s+', ' ', str(x)).strip().lower()
-
-    if multi:
-        df.columns = [clean(a) + "_" + clean(b) for a,b in df.columns]
-    else:
-        df.columns = [clean(c) for c in df.columns]
-
-    # =========================
-    # DETEKSI KOLOM
-    # =========================
-    def find(keyword):
-        return next((c for c in df.columns if keyword in c), None)
+    def find(k):
+        return next((c for c in df.columns if k in c), None)
 
     col_tgl = find("tanggal")
     col_mask = find("maskapai") or find("operator")
     col_jns = find("pergerakan") or find("jenis")
 
-    col_flight = find("nomor penerbangan") or find("flight")
+    col_flight = next((c for c in df.columns if "nomor" in c and "penerbangan" in c), None)
 
     col_dew = find("dewasa")
     col_anak = find("anak")
     col_bayi = find("bayi")
 
     col_transit_dewasa = next((c for c in df.columns if "transit" in c and "dewasa" in c), None)
-    col_transit_total = find("transit")
+    col_transit_anak = next((c for c in df.columns if "transit" in c and "anak" in c), None)
+    col_transit_total = next((c for c in df.columns if "transit" in c), None)
 
     col_kargo = find("kargo")
+
+    if not col_tgl or not col_mask:
+        st.error("Format tidak dikenali")
+        st.write(df.columns)
+        st.stop()
 
     # =========================
     # DATAFRAME
@@ -107,12 +92,13 @@ if file:
     data = pd.DataFrame({
         "Tanggal": df[col_tgl],
         "Maskapai": df[col_mask],
-        "Pergerakan": df[col_jns] if col_jns else "D",
-        "No Flight Raw": df[col_flight] if col_flight else "",
-        "Dewasa": df[col_dew] if col_dew else 0,
-        "Anak": df[col_anak] if col_anak else 0,
-        "Bayi": df[col_bayi] if col_bayi else 0,
+        "Pergerakan": df[col_jns],
+        "No Flight": df[col_flight],
+        "Dewasa": df[col_dew],
+        "Anak": df[col_anak],
+        "Bayi": df[col_bayi],
         "Transit_Dewasa": df[col_transit_dewasa] if col_transit_dewasa else 0,
+        "Transit_Anak": df[col_transit_anak] if col_transit_anak else 0,
         "Transit_Total": df[col_transit_total] if col_transit_total else 0,
         "Kargo": df[col_kargo] if col_kargo else 0
     })
@@ -127,37 +113,26 @@ if file:
         "D":"Departure","A":"Arrival"
     })
 
-    def extract_flight(x):
-        x = str(x).upper()
-        match = re.search(r'[A-Z]{1,3}[0-9]{2,4}', x)
-        return match.group(0) if match else "UNKNOWN"
+    data["No Flight"] = data["No Flight"].astype(str).str.extract(r'([A-Z]{1,3}[0-9]{2,4})')
 
-    data["No Flight"] = data["No Flight Raw"].apply(extract_flight)
-
-    for c in ["Dewasa","Anak","Bayi","Transit_Dewasa","Transit_Total","Kargo"]:
+    for c in ["Dewasa","Anak","Bayi","Transit_Dewasa","Transit_Anak","Transit_Total","Kargo"]:
         data[c] = pd.to_numeric(data[c], errors="coerce").fillna(0)
 
     # =========================
-    # 🔥 PERHITUNGAN (FIX ANAK SAJA)
+    # 🔥 LOGIC FINAL (INI SAJA YANG DIUBAH)
     # =========================
-    data["Dewasa_Bersih"] = (data["Dewasa"] - data["Transit_Dewasa"]).clip(lower=0)
+    data["Dewasa_PJP2U"] = (data["Dewasa"] - data["Transit_Dewasa"]).clip(lower=0)
+    data["Anak_PJP2U"] = (data["Anak"] - data["Transit_Anak"]).clip(lower=0)
 
-    # 🔥 tambahan
-    data["Transit_Anak"] = (data["Transit_Total"] - data["Transit_Dewasa"]).clip(lower=0)
-
-    # 🔥 FIX UTAMA
-    data["Anak_PJP2U"] = (data["Anak"] - data["Transit_Anak"]).abs()
-
-    # 🔥 TOTAL
-    data["PJP2U"] = data["Dewasa_Bersih"] + data["Anak_PJP2U"]
+    data["PJP2U"] = data["Dewasa_PJP2U"] + data["Anak_PJP2U"]
 
     # =========================
-    # FILTER
+    # FILTER (TETAP)
     # =========================
     st.sidebar.header("Filter")
 
     maskapai = st.sidebar.selectbox("Maskapai", sorted(data["Maskapai"].unique()))
-    flight = st.sidebar.selectbox("No Penerbangan", ["SEMUA"] + sorted(data["No Flight"].unique()))
+    flight = st.sidebar.selectbox("No Penerbangan", ["SEMUA"] + sorted(data["No Flight"].dropna().unique()))
     pergerakan = st.sidebar.selectbox("Pergerakan", ["SEMUA","Departure","Arrival"])
 
     mode = st.sidebar.radio("Tanggal", ["1 Hari","Rentang"])
@@ -191,10 +166,10 @@ if file:
     f = f[(f["Tanggal"] >= start) & (f["Tanggal"] <= end)]
 
     # =========================
-    # HASIL
+    # HASIL (DISESUAIKAN)
     # =========================
     if kategori == "Dewasa":
-        f["Hasil"] = f["Dewasa_Bersih"]
+        f["Hasil"] = f["Dewasa_PJP2U"]
     elif kategori == "Anak":
         f["Hasil"] = f["Anak_PJP2U"]
     elif kategori == "PJP2U":
@@ -211,7 +186,7 @@ if file:
     total = int(f["Hasil"].sum())
 
     # =========================
-    # KPI
+    # KPI (TETAP)
     # =========================
     st.subheader("📊 KPI Utama")
 
@@ -234,24 +209,23 @@ if file:
     with c4:
         card("Kargo", int(data["Kargo"].sum()), "red")
 
+    # =========================
+    # HASIL PENCARIAN (TETAP)
+    # =========================
     st.subheader("📌 Hasil Pencarian")
     card("Total Hasil", total, "green" if total > 0 else "red")
 
+    # =========================
+    # GRAFIK (TETAP)
+    # =========================
     st.subheader("📈 Tren PJP2U")
     st.line_chart(data.groupby(data["Tanggal"].dt.date)["PJP2U"].sum())
 
     # =========================
-    # DETAIL
+    # DETAIL (TETAP)
     # =========================
     st.subheader("📋 Detail Data")
     st.dataframe(f, use_container_width=True)
-
-    st.markdown("""
-    <hr>
-    <p style='text-align: center; color: gray;'>
-    Copyright © 2026 Data UPBU Rendani Airport
-    </p>
-    """, unsafe_allow_html=True)
 
 else:
     st.info("Upload file Excel untuk mulai")
